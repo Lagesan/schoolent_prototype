@@ -62,6 +62,7 @@ def get_spark_response(user_input):  # 获取讯飞API返回的流数据
     header = {
         "Authorization": "replaced by your own token",
     }
+
     response = requests.post(url, headers=header, json=data)
     response.encoding = "utf-8"
     try:
@@ -212,7 +213,10 @@ def handle_message():
     try:
         if file:
             filename = file.filename
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            user_folder = os.path.join(app.config['UPLOAD_FOLDER'], username)
+            if not os.path.exists(user_folder):
+                os.makedirs(user_folder)
+            file_path = os.path.join(user_folder, filename)
             file.save(file_path)
             
             with sqlite3.connect('app.db') as conn:
