@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
+    <title>Login</title>
+    <style>
+        body, html {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        background-color: #f0f0f0;
+    }
+
+    .container {
+        display: grid;
+        grid-template-columns: 1.5fr 1fr;
+        width: 1150px;
+        border-radius: 40px;
+        height: 98%;
+        background-color: white;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .image-column {
+        background-image: url('./static/bg_login.png');
+        background-size: cover;
+        background-position: center;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        border-radius: 40px;
+        align-items: center;
+        color: white;
+        font-family: Source Han Sans;
+        font-size: 36px;
+    }
+
+    .form-column {
+        padding: 50px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    .form-column h2{
+        position: absolute;
+        top: 13%;
+        width: 110px;
+        height: 80px;
+        opacity: 1;
+        font-family: Source Han Sans;
+        font-size: 55px;
+        font-weight: normal;
+        line-height: normal;
+        letter-spacing: 0em;
+        font-variation-settings: "opsz" auto;
+        font-feature-settings: "kern" on;
+        color: #3D3D3D;
+    }
+    .form-column input {
+        width: 200px;
+        height: 40px;
+        border-radius: 10px;
+        opacity: 1;
+        margin-bottom: 10%;
+        background: #FFFFFF;
+
+        box-sizing: border-box;
+        border: 2px solid #D8D8D8;
+    }
+    .form-column button{
+        margin-left: 20%;
+        width: 160px;
+        height: 50px;
+        border-radius: 30px;
+        border: none;
+        opacity: 1;
+        color: white;
+        background: #00BFFF;
+    }
+    .back-button {
+            position: absolute;
+            top: 8%;
+            right: 15%;
+            text-decoration: none;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="image-column">
+        </div>
+        <div class="form-column">
+            <a href="{{ url_for('home') }}" class="back-button"><i class="iconfont back" style="font-size: 18px;"></i></a>
+            <h2>登录</h2>
+            <br><br><br>
+            <form method="post" action="/login">
+            <label for="username">Username:</label>
+            <input type="text" name="username" id="username" required>
+            <br>
+            <label for="password">Password:</label>
+            <input type="password" name="password" id="password" required>
+            <br>
+            <button class="button" type="submit" style="font-size: large;">Login</button>
+        </form>
+        </div>
+    </div>
+</body>
+</html>

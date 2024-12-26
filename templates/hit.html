@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bombing Effect</title>
+<style>
+    body {
+        background-image: url('static/map.png');
+        background-color: #3c512c;
+        background-position: top; 
+        background-repeat: no-repeat;
+        background-size: 80%;
+    }
+    .bombing-box {
+    position: absolute;
+    width: 200px;
+    height: 200px;
+    border: 4px solid white;
+    box-sizing: border-box;
+    pointer-events: none; /* 防止点击事件被轰炸框拦截 */
+    transform-origin: center;
+    opacity: 0; /* 默认透明度为0 */
+    transition: transform 0.5s ease, opacity 0.5s ease;
+  }
+
+  /* 动画效果 */
+  @keyframes shrink {
+    from {
+      transform: scale(1);
+      opacity: 1;
+    }
+    to {
+      transform: scale(0.8);
+      opacity: 0;
+    }
+  }
+
+  .shrink {
+    animation: shrink 0.5s forwards;
+  }
+</style>
+</head>
+<body>
+
+<div class="bombing-box" id="bombingBox"></div>
+<script>
+    // 尝试在页面加载后自动全屏
+    function launchIntoFullscreen(element) {
+      if (element.requestFullscreen) {
+        element.requestFullscreen();
+      } else if (element.mozRequestFullScreen) { /* Firefox */
+        element.mozRequestFullScreen();
+      } else if (element.webkitRequestFullscreen) { /* Chrome, Safari & Opera */
+        element.webkitRequestFullscreen();
+      } else if (element.msRequestFullscreen) { /* IE/Edge */
+        element.msRequestFullscreen();
+      }
+    }
+  
+    // 监听 DOMContentLoaded 事件确保 DOM 完全加载
+    document.addEventListener('DOMContentLoaded', function() {
+      launchIntoFullscreen(document.documentElement);
+    });
+  </script>
+<script>
+    
+    document.addEventListener('click', function(event) {
+    // 创建一个新的轰炸框元素
+    const bombingBox = document.createElement('div');
+    bombingBox.className = 'bombing-box shrink';
+    bombingBox.style.left = `${event.clientX - 100}px`; // 减去一半的宽度
+    bombingBox.style.top = `${event.clientY - 100}px`; // 减去一半的高度
+
+    // 将轰炸框添加到body中
+    document.body.appendChild(bombingBox);
+
+    });
+</script>
+
+</body>
+</html>

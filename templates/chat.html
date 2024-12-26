@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Room</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='obs_style.css') }}">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f9f9f9;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            background-color: #007bff;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header a {
+            color: white;
+            text-decoration: none;
+            font-size: 16px;
+            margin: 0 10px;
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+        }
+
+        #messages {
+            list-style: none;
+            margin: 0;
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #messages li {
+            background: #e0e0e0;
+            padding: 10px 15px;
+            border-radius: 10px;
+            max-width: 70%;
+        }
+
+        #messages li.self {
+            background: #007bff;
+            color: white;
+            align-self: flex-end;
+        }
+
+        .message-form {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border-top: 1px solid #ddd;
+            background: white;
+        }
+
+        .message-form input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            margin-right: 10px;
+            outline: none;
+        }
+
+        .message-form input[type="file"] {
+            display: none;
+        }
+
+        .file-label {
+            color: #007bff;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        .send-button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+
+        .send-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .file-preview {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #555;
+        }
+
+        .media-container {
+            margin-top: 10px;
+        }
+
+        .media-container img, .media-container video {
+            max-width: 100%;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <a href="{{ url_for('dashboard') }}" style="color: inherit;text-decoration: none;"><i class="iconfont back" style="font-size: 20px;"></i></a>
+        <h1>Chat Room</h1>
+    </header>
+    <div class="chat-container">
+        <ul id="messages">
+            {% for message in messages %}
+                <li class="{% if message[1] == session['user_id'] %}self{% endif %}">
+                    <p>{{ message[-2] }} - {{ message[2] }}</p>
+                    {% if message[6] %}
+                        <div class="media-container">
+                            {% if message[6].endswith('.jpg') or message[6].endswith('.png') or message[6].endswith('.gif') or message[6].endswith('.jpeg') %}
+                                <img src="{{ url_for('uploaded_file', filename=message[6]) }}" alt="Image">
+                            {% elif message[6].endswith('.mp4') or message[6].endswith('.webm') or message[6].endswith('.mp3') %}
+                                <video controls>
+                                    <source src="{{ url_for('uploaded_file', filename=message[6]) }}" type="video/mp4">
+                                    Your browser does not support the video tag.
+                                </video>
+                            {% else %}
+                                <a href="{{ url_for('uploaded_file', filename=message[6]) }}" target="_blank">View Attachment</a>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+        <form class="message-form" method="post" enctype="multipart/form-data">
+            <label class="file-label" for="file-input">
+                <img src="{{ url_for('static', filename='file-add.png') }}" alt="Send" style="width: 20%; height: 2%;">
+            </label>
+            <input type="file" id="file-input" name="file">
+            <span class="file-preview" id="file-preview">No file selected</span>
+            <input type="text" name="message" placeholder="Let's chat..." required>
+            <button class="send-button" type="submit">Send</button>
+        </form>
+    </div>
+    <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
+<script>
+    const socket = io('http://' + window.location.hostname + ':1002');
+    const messagesContainer = document.getElementById('messages');
+
+    socket.on('connect', function() {
+        console.log('SocketIO connection established');
+    });
+
+    socket.on('disconnect', function() {
+        console.log('SocketIO connection disconnected');
+    });
+
+    socket.on('new_message', function(data) {
+        const newMessage = document.createElement('li');
+        newMessage.className = data.username === '{{ session.username }}' ? 'self' : '';
+        newMessage.innerHTML = `${data.username}: ${data.message}`;
+
+        if (data.filename) {
+            const mediaContainer = document.createElement('div');
+            mediaContainer.className = 'media-container';
+
+            if (data.filename.endsWith('.jpg') || data.filename.endsWith('.png') || data.filename.endsWith('.gif')) {
+                const img = document.createElement('img');
+                img.src = data.filepath;
+                img.alt = "Image";
+                mediaContainer.appendChild(img);
+            } else if (data.filename.endsWith('.mp4') || data.filename.endsWith('.webm') || data.filename.endsWith('.mp3')) {
+                const video = document.createElement('video');
+                video.controls = true;
+                const source = document.createElement('source');
+                source.src = data.filepath;
+                source.type = 'video/mp4';
+                video.appendChild(source);
+                mediaContainer.appendChild(video);
+            } else {
+                const a = document.createElement('a');
+                a.href = data.filepath;
+                a.textContent = 'View Attachment';
+                a.target = '_blank';
+                mediaContainer.appendChild(a);
+            }
+
+            newMessage.appendChild(mediaContainer);
+        }
+
+        messagesContainer.appendChild(newMessage);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    });
+
+    document.querySelector('.message-form').addEventListener('submit', function(e) {
+    e.preventDefault(); // 防止默认提交行为
+    const messageInput = document.querySelector('[name="message"]');
+    const message = messageInput.value;
+    console.log("Message submitted:", message);
+    
+    fetch('{{ url_for("handle_message") }}', {
+        method: 'POST',
+        body: new FormData(this)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Success:', data);
+        // 清空输入框
+        messageInput.value = ''; 
+    })
+    .catch(error => {
+        console.error('Error:', error);
+    });
+});
+
+window.onload = function() {
+    const messagesContainer = document.getElementById('messages');
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+};
+</script>
+</body>
+</html>

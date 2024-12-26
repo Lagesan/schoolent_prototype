@@ -1,0 +1,22 @@
+@font-face {
+    font-family: "iconfont"; 
+    src: 
+    url('send.ttf') format('truetype');
+  }
+  
+  .iconfont {
+    font-family: "iconfont" !important;
+    font-size: 18px;
+    font-style: normal;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  .back:before {
+    content: "\e600";
+  }
+  
+  .icon-send:before {
+    content: "\e856";
+  }
+  
