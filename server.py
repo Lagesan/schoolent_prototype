@@ -60,9 +60,8 @@ def get_spark_response(user_input):  # 获取讯飞API返回的流数据
                 "stream": False
         }
     header = {
-        "Authorization": "replace with your own token",
+        "Authorization": "replaced by your own token",
     }
-
     response = requests.post(url, headers=header, json=data)
     response.encoding = "utf-8"
     try:

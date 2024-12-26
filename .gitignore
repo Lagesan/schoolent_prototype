@@ -17,6 +17,6 @@ build/
 
 # Ignore OS generated files
 .DS_Store
-app.db
+*.db
 upload/
 staff.txt
