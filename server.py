@@ -60,7 +60,7 @@ def get_spark_response(user_input):  # 获取讯飞API返回的流数据
                 "stream": False
         }
     header = {
-        "Authorization": "replaced by your own token",
+         "Authorization": "replaced by your own token",
     }
 
     response = requests.post(url, headers=header, json=data)
@@ -257,9 +257,9 @@ def handle_message():
 
 
 
-@app.route('/uploads/<filename>')
-def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+@app.route('/uploads/<user>/<filename>')
+def uploaded_file(user, filename):
+    return send_from_directory(os.path.join(app.config['UPLOAD_FOLDER'], user), filename)
 
 
 

@@ -134,18 +134,18 @@
                 <li class="{% if message[1] == session['user_id'] %}self{% endif %}">
                     <p>{{ message[-2] }} - {{ message[2] }}</p>
                     {% if message[6] %}
-                        <div class="media-container">
-                            {% if message[6].endswith('.jpg') or message[6].endswith('.png') or message[6].endswith('.gif') or message[6].endswith('.jpeg') %}
-                                <img src="{{ url_for('uploaded_file', filename=message[6]) }}" alt="Image">
-                            {% elif message[6].endswith('.mp4') or message[6].endswith('.webm') or message[6].endswith('.mp3') %}
-                                <video controls>
-                                    <source src="{{ url_for('uploaded_file', filename=message[6]) }}" type="video/mp4">
-                                    Your browser does not support the video tag.
-                                </video>
-                            {% else %}
-                                <a href="{{ url_for('uploaded_file', filename=message[6]) }}" target="_blank">View Attachment</a>
-                            {% endif %}
-                        </div>
+                    <div class="media-container">
+                        {% if message[6].endswith('.jpg') or message[6].endswith('.png') or message[6].endswith('.gif') or message[6].endswith('.jpeg') %}
+                            <img src="{{ url_for('uploaded_file', user=message[-2], filename=message[6]) }}" alt="Image">
+                        {% elif message[6].endswith('.mp4') or message[6].endswith('.webm') or message[6].endswith('.mp3') %}
+                            <video controls>
+                                <source src="{{ url_for('uploaded_file', user=message[-2], filename=message[6]) }}" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                        {% else %}
+                            <a href="{{ url_for('uploaded_file', user=message[-2], filename=message[6]) }}" target="_blank">View Attachment</a>
+                        {% endif %}
+                    </div>
                     {% endif %}
                 </li>
             {% endfor %}
@@ -165,50 +165,42 @@
     const socket = io('http://' + window.location.hostname + ':1002');
     const messagesContainer = document.getElementById('messages');
 
-    socket.on('connect', function() {
-        console.log('SocketIO connection established');
-    });
-
-    socket.on('disconnect', function() {
-        console.log('SocketIO connection disconnected');
-    });
-
     socket.on('new_message', function(data) {
-        const newMessage = document.createElement('li');
-        newMessage.className = data.username === '{{ session.username }}' ? 'self' : '';
-        newMessage.innerHTML = `${data.username}: ${data.message}`;
+    const newMessage = document.createElement('li');
+    newMessage.className = data.username === '{{ session.username }}' ? 'self' : '';
+    newMessage.innerHTML = `${data.username}: ${data.message}`;
 
-        if (data.filename) {
-            const mediaContainer = document.createElement('div');
-            mediaContainer.className = 'media-container';
+    if (data.filename) {
+        const mediaContainer = document.createElement('div');
+        mediaContainer.className = 'media-container';
 
-            if (data.filename.endsWith('.jpg') || data.filename.endsWith('.png') || data.filename.endsWith('.gif')) {
-                const img = document.createElement('img');
-                img.src = data.filepath;
-                img.alt = "Image";
-                mediaContainer.appendChild(img);
-            } else if (data.filename.endsWith('.mp4') || data.filename.endsWith('.webm') || data.filename.endsWith('.mp3')) {
-                const video = document.createElement('video');
-                video.controls = true;
-                const source = document.createElement('source');
-                source.src = data.filepath;
-                source.type = 'video/mp4';
-                video.appendChild(source);
-                mediaContainer.appendChild(video);
-            } else {
-                const a = document.createElement('a');
-                a.href = data.filepath;
-                a.textContent = 'View Attachment';
-                a.target = '_blank';
-                mediaContainer.appendChild(a);
-            }
-
-            newMessage.appendChild(mediaContainer);
+        if (data.filename.endsWith('.jpg') || data.filename.endsWith('.png') || data.filename.endsWith('.gif')) {
+            const img = document.createElement('img');
+            img.src = data.filepath;
+            img.alt = "Image";
+            mediaContainer.appendChild(img);
+        } else if (data.filename.endsWith('.mp4') || data.filename.endsWith('.webm') || data.filename.endsWith('.mp3')) {
+            const video = document.createElement('video');
+            video.controls = true;
+            const source = document.createElement('source');
+            source.src = data.filepath;
+            source.type = 'video/mp4';
+            video.appendChild(source);
+            mediaContainer.appendChild(video);
+        } else {
+            const a = document.createElement('a');
+            a.href = data.filepath;
+            a.textContent = 'View Attachment';
+            a.target = '_blank';
+            mediaContainer.appendChild(a);
         }
 
-        messagesContainer.appendChild(newMessage);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    });
+        newMessage.appendChild(mediaContainer);
+    }
+
+    messagesContainer.appendChild(newMessage);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+});
 
     document.querySelector('.message-form').addEventListener('submit', function(e) {
     e.preventDefault(); // 防止默认提交行为

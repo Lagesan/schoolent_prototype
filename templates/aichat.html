@@ -85,7 +85,7 @@
             background-color: #0056b3;
         }
     </style>
-  <script src="{{ url_for('static', filename='js/marked/marked.min.js') }}"></script>
+  <!-- <script src="{{ url_for('static', filename='js/marked/marked.min.js') }}"></script> -->
   <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
 
 </head>
@@ -133,7 +133,7 @@
                     const { value, done: doneReading } = await reader.read();
                     done = doneReading;
 
-                    aiMessage += decoder.decode(value, { stream: true });
+                    aiMessage += decoder.decode(value, { stream: false });
                 }
 
                 appendMessage(aiMessage, 'ai');
@@ -150,7 +150,8 @@
             messageElement.classList.add('message', sender);
 
             // 使用marked库将Markdown转化为HTML
-            messageElement.innerHTML =  marked.parseInline(message);
+            // messageElement.innerHTML =  marked.parseInline(message);
+            messageElement.textContent = message;
             chatBox.appendChild(messageElement);
 
             // Scroll to the bottom of the chat box
