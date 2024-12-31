@@ -121,12 +121,18 @@
             max-width: 100%;
             border-radius: 10px;
         }
+
+        .online-users {
+            font-size: 14px;
+            color: white;
+        }
     </style>
 </head>
 <body>
     <header>
         <a href="{{ url_for('dashboard') }}" style="color: inherit;text-decoration: none;"><i class="iconfont back" style="font-size: 20px;"></i></a>
         <h1>Chat Room</h1>
+        <span class="online-users" id="online-users">Online Users: 0</span>
     </header>
     <div class="chat-container">
         <ul id="messages">
@@ -161,77 +167,94 @@
         </form>
     </div>
     <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
-<script>
-    const socket = io('http://' + window.location.hostname + ':1002');
-    const messagesContainer = document.getElementById('messages');
-
-    socket.on('new_message', function(data) {
-    const newMessage = document.createElement('li');
-    newMessage.className = data.username === '{{ session.username }}' ? 'self' : '';
-    newMessage.innerHTML = `${data.username}: ${data.message}`;
-
-    if (data.filename) {
-        const mediaContainer = document.createElement('div');
-        mediaContainer.className = 'media-container';
-
-        if (data.filename.endsWith('.jpg') || data.filename.endsWith('.png') || data.filename.endsWith('.gif')) {
-            const img = document.createElement('img');
-            img.src = data.filepath;
-            img.alt = "Image";
-            mediaContainer.appendChild(img);
-        } else if (data.filename.endsWith('.mp4') || data.filename.endsWith('.webm') || data.filename.endsWith('.mp3')) {
-            const video = document.createElement('video');
-            video.controls = true;
-            const source = document.createElement('source');
-            source.src = data.filepath;
-            source.type = 'video/mp4';
-            video.appendChild(source);
-            mediaContainer.appendChild(video);
-        } else {
-            const a = document.createElement('a');
-            a.href = data.filepath;
-            a.textContent = 'View Attachment';
-            a.target = '_blank';
-            mediaContainer.appendChild(a);
-        }
-
-        newMessage.appendChild(mediaContainer);
-    }
-
-    messagesContainer.appendChild(newMessage);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-});
-
-    document.querySelector('.message-form').addEventListener('submit', function(e) {
-    e.preventDefault(); // 防止默认提交行为
-    const messageInput = document.querySelector('[name="message"]');
-    const message = messageInput.value;
-    console.log("Message submitted:", message);
+    <script>
+        const socket = io('http://' + window.location.hostname + ':1002');
+        const messagesContainer = document.getElementById('messages');
+        const fileInput = document.getElementById('file-input');
+        const filePreview = document.getElementById('file-preview');
+        const onlineUsers = document.getElementById('online-users');
     
-    fetch('{{ url_for("handle_message") }}', {
-        method: 'POST',
-        body: new FormData(this)
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-    })
-    .then(data => {
-        console.log('Success:', data);
-        // 清空输入框
-        messageInput.value = ''; 
-    })
-    .catch(error => {
-        console.error('Error:', error);
-    });
-});
-
-window.onload = function() {
-    const messagesContainer = document.getElementById('messages');
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-};
-</script>
+        socket.on('new_message', function(data) {
+            const newMessage = document.createElement('li');
+            newMessage.className = data.username === '{{ session.username }}' ? 'self' : '';
+            newMessage.innerHTML = `${data.username}: ${data.message}`;
+    
+            if (data.filename) {
+                const mediaContainer = document.createElement('div');
+                mediaContainer.className = 'media-container';
+    
+                if (data.filename.endsWith('.jpg') || data.filename.endsWith('.png') || data.filename.endsWith('.gif') || data.filename.endsWith('.jpeg')) {
+                    const img = document.createElement('img');
+                    img.src = data.filepath;
+                    img.alt = "Image";
+                    mediaContainer.appendChild(img);
+                } else if (data.filename.endsWith('.mp4') || data.filename.endsWith('.webm') || data.filename.endsWith('.mp3')) {
+                    const video = document.createElement('video');
+                    video.controls = true;
+                    const source = document.createElement('source');
+                    source.src = data.filepath;
+                    source.type = 'video/mp4';
+                    video.appendChild(source);
+                    mediaContainer.appendChild(video);
+                } else {
+                    const a = document.createElement('a');
+                    a.href = data.filepath;
+                    a.textContent = 'View Attachment';
+                    a.target = '_blank';
+                    mediaContainer.appendChild(a);
+                }
+    
+                newMessage.appendChild(mediaContainer);
+            }
+    
+            messagesContainer.appendChild(newMessage);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        });
+    
+        socket.on('update_online_users', function(data) {
+            onlineUsers.textContent = `Online Users: ${data.count}`;
+        });
+    
+        document.querySelector('.message-form').addEventListener('submit', function(e) {
+            e.preventDefault(); // 防止默认提交行为
+            const messageInput = document.querySelector('[name="message"]');
+            const message = messageInput.value;
+            console.log("Message submitted:", message);
+            
+            fetch('{{ url_for("handle_message") }}', {
+                method: 'POST',
+                body: new FormData(this)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Success:', data);
+                // 清空输入框
+                messageInput.value = ''; 
+                fileInput.value = ''; // 清空文件输入框
+                filePreview.textContent = 'No file selected'; // 重置文件预览文本
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        });
+    
+        fileInput.addEventListener('change', function() {
+            if (fileInput.files.length > 0) {
+                filePreview.textContent = fileInput.files[0].name;
+            } else {
+                filePreview.textContent = 'No file selected';
+            }
+        });
+    
+        window.onload = function() {
+            const messagesContainer = document.getElementById('messages');
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        };
+    </script>
 </body>
 </html>

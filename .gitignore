@@ -20,3 +20,4 @@ build/
 *.db
 uploads/
 staff.txt
+*.set

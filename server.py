@@ -13,7 +13,26 @@ app.config['MAX_CONTENT_LENGTH'] = None
 app.config['SESSION_TYPE'] = 'sqlalchemy'
 app.config['UPLOAD_FOLDER'] = 'uploads/'
 
-# 确保上传文件夹存在
+
+
+# config the authorization of the spark api from local file:server.set, if not exist create one
+authorization = ""
+if not os.path.exists("server.set"):
+    with open("server.set", "w") as f:
+        f.write("authorization=")
+
+with open("server.set", "r") as f:
+    # read authorization from server.set (info after "=")
+    info = f.read().strip()
+    if info == 'authorization=':
+        print("Please input the authorization of the spark api")
+    elif info:
+        authorization = info.split("=")[1]
+    # close the file
+    f.close()
+        
+        
+
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
@@ -34,7 +53,7 @@ def init_db():
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             user_id INTEGER,
                             message TEXT NOT NULL,
-                            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            time TEXT NOT NULL,
                             file_id INTEGER NULL,
                             username TEXT NOT NULL)''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS files (
@@ -60,7 +79,7 @@ def get_spark_response(user_input):  # 获取讯飞API返回的流数据
                 "stream": False
         }
     header = {
-         "Authorization": "replaced by your own token",
+         "Authorization": authorization,
     }
 
     response = requests.post(url, headers=header, json=data)
@@ -78,6 +97,7 @@ def get_spark_response(user_input):  # 获取讯飞API返回的流数据
 
 # 初始化 SocketIO
 socketio = SocketIO(app)
+online_users = 0
 
 @app.route('/')    # main page
 def home():
@@ -193,7 +213,7 @@ def render_chat():
     
     with sqlite3.connect('app.db') as conn:
         cursor = conn.cursor()
-        cursor.execute('SELECT messages.*, files.filename FROM messages LEFT JOIN files ON messages.file_id = files.id ORDER BY timestamp ASC')
+        cursor.execute('SELECT messages.*, files.filename FROM messages LEFT JOIN files ON messages.file_id = files.id ORDER BY time ASC')
         messages = cursor.fetchall()
     return render_template('chat.html', messages=messages)
 
@@ -211,46 +231,42 @@ def handle_message():
     file_path = None
 
     try:
-        if file:
-            filename = file.filename
-            user_folder = os.path.join(app.config['UPLOAD_FOLDER'], username)
-            if not os.path.exists(user_folder):
-                os.makedirs(user_folder)
-            file_path = os.path.join(user_folder, filename)
-            file.save(file_path)
-            
-            with sqlite3.connect('app.db') as conn:
-                cursor = conn.cursor()
+        with sqlite3.connect('app.db') as conn:
+            cursor = conn.cursor()
+            if file:
+                filename = file.filename
+                user_folder = os.path.join(app.config['UPLOAD_FOLDER'], username)
+                if not os.path.exists(user_folder):
+                    os.makedirs(user_folder)
+                file_path = os.path.join(user_folder, filename)
+                file.save(file_path)
+                
                 cursor.execute('INSERT INTO files (filename, filepath) VALUES (?, ?)', (filename, file_path))
                 file_id = cursor.lastrowid
-                
-                cursor.execute(
-                    'INSERT INTO messages (user_id, username, message, file_id) VALUES (?, ?, ?, ?)',
-                    (session['user_id'], username, message, file_id)
-                )
-                conn.commit()
-        else:
-            with sqlite3.connect('app.db') as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    'INSERT INTO messages (user_id, username, message) VALUES (?, ?, ?)',
-                    (session['user_id'], username, message)
-                )
-                conn.commit()
+            else:
+                file_id = None
+
+            chat_timestamp = time.time()
+            chat_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(chat_timestamp))
+            cursor.execute(
+                'INSERT INTO messages (user_id, username, message, time, file_id) VALUES (?, ?, ?, ?, ?)',
+                (session['user_id'], username, message, chat_time, file_id)
+            )
+            conn.commit()
 
         # 使用 SocketIO 广播消息
         socketio.emit('new_message', {
             'username': username,
             'message': message,
             'filename': filename,
-            'filepath': url_for('uploaded_file', filename=filename) if filename else None
+            'filepath': url_for('uploaded_file', user=username, filename=filename) if filename else None
         })
 
         return jsonify({
             'status': 'success',
             'message': message,
             'filename': filename,
-            'filepath': url_for('uploaded_file', filename=filename) if filename else None
+            'filepath': url_for('uploaded_file', user=username, filename=filename) if filename else None
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -261,15 +277,18 @@ def handle_message():
 def uploaded_file(user, filename):
     return send_from_directory(os.path.join(app.config['UPLOAD_FOLDER'], user), filename)
 
-
-
-# SocketIO 事件处理
 @socketio.on('connect')
 def handle_connect():
+    global online_users
+    online_users += 1
+    emit('update_online_users', {'count': online_users}, broadcast=True)
     print("Client connected")
 
 @socketio.on('disconnect')
 def handle_disconnect():
+    global online_users
+    online_users -= 1
+    emit('update_online_users', {'count': online_users}, broadcast=True)
     print("Client disconnected")
 
 if __name__ == '__main__':
