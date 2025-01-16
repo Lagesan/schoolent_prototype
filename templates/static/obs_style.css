@@ -55,10 +55,9 @@ button {
     border: none;
 }
 footer {
-    background-color: #535353;
     padding: 10px 0;
     text-align: center;
-    color: lightgrey;
+    color: grey;
     border-top: 1px solid #ddd;
 }
 .section {

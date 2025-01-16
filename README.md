@@ -1,6 +1,6 @@
 # Schoolent Prototype
 
-This is a prototype web application built using Flask. The application includes user authentication, chat functionality, and AI chat integration using the Spark API. Additionally, Socket.IO and Marked.js have been added to enhance real-time communication and markdown rendering.
+This is a prototype of Schoolent Web edition based on Flask.
 
 ## Features
 
@@ -10,6 +10,7 @@ This is a prototype web application built using Flask. The application includes 
 - Real-time chat with file upload support
 - Socket.IO for real-time communication
 - Marked.js for markdown rendering
+- Bilibili video download
 - ......
 
 ## Installation
@@ -42,6 +43,9 @@ This is a prototype web application built using Flask. The application includes 
     ```bash
     python server.py
     ```
+2. Edit settings in `server.set`(it will be created after you first run server.py)
+    Setting example(meaningless API key): 
+    `authorization=Bearer AEOuoKKfZsasdNQ:kDmSDCDBsfcd`
 
 2. Open your web browser and navigate to `http://localhost:1002`.
 
@@ -51,6 +55,7 @@ This is a prototype web application built using Flask. The application includes 
 - `templates/`: Directory containing HTML templates.
 - `uploads/`: Directory for uploaded files.
 - `app.db`: SQLite database file.(generated automatically)
+- `server.set`: server settings, it is only used to set Spark Lite LLM api(generated automatically)
 ## Dependencies
 
 - Flask
@@ -59,6 +64,7 @@ This is a prototype web application built using Flask. The application includes 
 - Requests
 - Marked.js
 - working stably on Python 3.6.5
+- work well on ffmpeg 4.2.2
 
 ## License
 
@@ -70,3 +76,8 @@ We are thinking about it.
 - [Socket.IO](https://socket.io/)
 - [Marked.js](https://marked.js.org/)
 - [Spark API](https://spark-api-open.xf-yun.com/)
+
+
+
+## Reference
+- Bilibili API: [click here](https://www.bilibili.com/opus/552172175376927649)

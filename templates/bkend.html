@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="\static\obs_style.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
+    <title>Backend</title>
+    <style>
+        .layout {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px;
+        }
+
+        .left, .right {
+            width: 48%;
+        }
+
+        .msgbox {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border: 1px solid #ddd;
+            margin-bottom: 2%;
+        }
+
+        .user-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 10px;
+        }
+
+        .log-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 10px;
+            background-color: #f4f4f4;
+        }
+
+        iframe {
+            width: 100%;
+            height: 100vh;
+            border: none;
+        }
+
+        form {
+            width: 60%;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .textarea-container {
+            position: relative;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            background-color: #f4f4f4;
+            border: 1px solid #ccc;
+            border-radius: 25px;
+            padding: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .textarea-container textarea {
+            border: none;
+            background: transparent;
+            flex: 1;
+            font-size: 16px;
+            padding: 0 10px;
+            outline: none;
+            resize: none;
+        }
+
+        .send-button {
+            background-color: rgb(204, 204, 204);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 35px;
+            height: 35px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: not-allowed;
+        }
+
+        .send-button.active {
+            background-color: #007bff;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <a href="{{ url_for('dashboard') }}" style="color: inherit;text-decoration: none;"><i class="iconfont back" style="font-size: 20px;"></i></a>
+        <img src={{ url_for('static', filename='logo_schoolent.png') }} alt="" width="3%" height=auto style="margin-right: 1%;">
+        <h1>Backend</h1>
+    </header>
+    <div class="layout">
+        <div class="left">
+            <div class="msgbox">
+                <h2 class="online-users" id="online-users">Online Users: 0</h2>
+            </div>
+            <div class="msgbox">
+                <button id="delete-gv-button">删除B站视频缓存</button>
+                <button id="shutdown" style="background-color: rgb(247, 44, 122);">终止服务器</button>
+                <button id="restart-button">重启服务器</button>
+            </div>
+            <div class="msgbox" style="background-color: white;">
+                <form action="{{ url_for('bkend') }}" method="post">
+                    <div class="textarea-container">
+                        <textarea id="title" name="title" required placeholder="Enter notification title"></textarea>
+                    </div>
+                    <div class="textarea-container">
+                        <textarea id="content" name="content" required placeholder="Enter notification content"></textarea>
+                        <button class="send-button" id="send-button" type="submit">
+                            <i class="iconfont icon-send" style="font-size: 18px;"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="msgbox user-list" id="user-list">
+                <h2>Users</h2>
+                <div id="users"></div>
+            </div>
+            <div class="msgbox log-list" id="log-list">
+                <h2>Logs</h2>
+                <div id="logs"></div>
+            </div>
+        </div>
+        <div class="right">
+            <iframe src="/chat?embed=true"></iframe>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
+    <script>
+        const socket = io('http://' + window.location.hostname + ':1002');
+        const onlineUsers = document.getElementById('online-users');
+        socket.on('update_online_users', function(data) {
+            onlineUsers.textContent = `Online Users: ${data.count}`;
+        });
+
+        socket.on('log_message', function(data) {
+            const logsElement = document.getElementById('logs');
+            const logEntry = document.createElement('p');
+            logEntry.textContent = data.message;
+            logsElement.appendChild(logEntry);
+            logsElement.scrollTop = logsElement.scrollHeight;
+        });
+    </script>
+    <script>
+        document.getElementById('delete-gv-button').addEventListener('click', function() {
+            if (confirm('Are you sure you want to delete the GV folder? This action cannot be undone.')) {
+                fetch('/delete_gv_folder', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            alert('GV folder deleted successfully.');
+                        } else {
+                            alert('Error: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        alert('Error: ' + error.message);
+                    });
+            }
+        });
+
+        document.getElementById('restart-button').addEventListener('click', function() {
+            if (confirm('Are you sure you want to restart the server? This action cannot be undone.')) {
+                fetch('/restart', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            alert('Success: ' + data.message);
+                        } else {
+                            alert('Error: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        alert('Error: ' + error.message);
+                    });
+            }
+        });
+
+        document.getElementById('shutdown').addEventListener('click', function() {
+            if (confirm('Are you sure you want to shut down the server? This action cannot be undone.')) {
+                fetch('/shutdown', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            alert('Success: Server is shutting down.');
+                        } else {
+                            alert('Error: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        alert('Error: ' + error.message);
+                    });
+            }
+        });
+
+        function fetchUsers() {
+            fetch('/get_users')
+                .then(response => response.json())
+                .then(data => {
+                    const usersElement = document.getElementById('users');
+                    usersElement.innerHTML = '';
+                    if (data.users) {
+                        data.users.forEach(user => {
+                            usersElement.innerHTML += `<p>Username: ${user.username}<br>Password: ${user.password}</p>`;
+                        });
+                    } else {
+                        usersElement.innerHTML = `<p>Error: ${data.error}</p>`;
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('users').innerHTML = `<p>Error: ${error.message}</p>`;
+                });
+        }
+
+        fetchUsers(); // Fetch users on page load
+
+        const titleInput = document.getElementById('title');
+        const contentInput = document.getElementById('content');
+        const sendButton = document.getElementById('send-button');
+
+        function updateSendButton() {
+            if (titleInput.value.trim() && contentInput.value.trim()) {
+                sendButton.classList.add('active');
+            } else {
+                sendButton.classList.remove('active');
+            }
+        }
+
+        // 监听输入事件
+        titleInput.addEventListener('input', updateSendButton);
+        contentInput.addEventListener('input', updateSendButton);
+    </script>
+</body>
+</html>
