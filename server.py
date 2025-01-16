@@ -106,6 +106,11 @@ def home():
     else:
         return render_template('index.html')
 
+@app.route('/g')    # main page
+def g():
+    return render_template('game-test.html')
+
+
 @app.route('/register', methods=['GET', 'POST'])     # register page
 def register():       # TODO:error message return to the page to alert user
     if request.method == 'POST':
