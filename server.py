@@ -5,7 +5,8 @@ import shutil
 from flask_socketio import SocketIO, emit
 from banalysis import download_bilibili_video
 import subprocess, threading, time
-import sys
+from markdown.extensions.fenced_code import FencedCodeExtension
+import markdown, uuid
 
 app = Flask(__name__, static_folder='templates/static')
 app.secret_key = 'g102'
@@ -16,6 +17,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = None
 app.config['SESSION_TYPE'] = 'sqlalchemy'
+app.config["PRIVATE_CHAT"] = 'chat/'
+app.config["USERS_SETTING"] = 'users/'
 app.config['UPLOAD_FOLDER'] = 'uploads/'
 app.config['BILIBILI_FOLDER'] = 'gv/'
 
@@ -42,9 +45,24 @@ with open("server.set", "r") as f:
     f.close()
         
         
+# folder init
+def init_folders():
+    if not os.path.exists(app.config['UPLOAD_FOLDER']):
+        os.makedirs(app.config['UPLOAD_FOLDER'])
 
-if not os.path.exists(app.config['UPLOAD_FOLDER']):
-    os.makedirs(app.config['UPLOAD_FOLDER'])
+    if not os.path.exists(app.config['PRIVATE_CHAT']):
+        os.makedirs(app.config['PRIVATE_CHAT'])
+
+    if not os.path.exists(app.config['USERS_SETTING']):
+        os.makedirs(app.config['USERS_SETTING'])
+
+    avatar_folder = os.path.join(app.config['USERS_SETTING'], 'avatar')
+    if not os.path.exists(avatar_folder):
+        os.makedirs(avatar_folder)
+
+    default_avatar_path = os.path.join('templates/static', 'noface.jpg')
+    if os.path.exists(default_avatar_path):
+        shutil.copy(default_avatar_path, avatar_folder)
 
 # 初始化数据库
 def init_db():
@@ -53,7 +71,13 @@ def init_db():
         cursor.execute('''CREATE TABLE IF NOT EXISTS users (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             username TEXT NOT NULL UNIQUE,
-                            password TEXT NOT NULL)''')
+                            password TEXT NOT NULL,
+                            avatar_route TEXT DEFAULT 'noface.jpg',
+                            bio TEXT DEFAULT 'What a lazy guy! This guy has not set a bio yet.',
+                            email TEXT DEFAULT 'None',
+                            sex TEXT DEFAULT 'None',
+                            classroom TEXT DEFAULT 'None',
+                            birthday TEXT DEFAULT 'None')''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS notifications (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             title TEXT NOT NULL,
@@ -73,52 +97,6 @@ def init_db():
                             filepath TEXT NOT NULL,
                             FOREIGN KEY (message_id) REFERENCES messages (id))''')
         conn.commit()
-
-
-
-# prefabricated dictionary prompt
-dict_prompt = """
-    你是一个专业的翻译器，要求释义准确、详细，请根据以下规则返回信息：
-查询的是单词，返回查询单词的所有意思以及音标。
-请注意：我可能会输入中文或英文单词来查询。请在返回信息中用 state_code 标识查询类型，其中 state_code 为 "1" 表示返回单词查询。
-单词查询示例：
-输入：act
-
-{
-  "state_code": "1",
-  "words": {
-    "word": "act",
-    "释义": {
-      "n.": "幕",
-      "vt.": "演"
-    },
-    "音标": "/ækt/",
-    "例句": {
-      "英文": "He acted in The Man of La Mancha.",
-      "中文": "他出演了《我，堂吉诃德》。"
-    }
-  }
-}
-
-现在我需要查询的是：
-"""
-sentence_prompt = """
-你是一个专业的翻译器，要求释义准确、详细，请根据以下规则返回信息：
-查询的是句子，返回句子的中英文翻译。
-请注意：我可能会输入中英文句子来查询。请根据输入的内容在返回信息中用 state_code 标识查询类型,为 "2" 表示返回翻译查询。
-
-翻译查询示例：
-输入：我们是学生
-
-{
-  "state_code": "2",
-  "sentence": {
-    "cn": "我们是学生。",
-    "en": "We are students."
-  }
-}
-现在我需要查询的是：
-"""
 
 
 # Bibili API headers
@@ -148,28 +126,20 @@ headers = {
 
 
 
-def get_spark_response(user_input):  # 获取讯飞API返回的流数据
-    ai_in = ""
-    if len(user_input.split()) == 1:
-        if all('\u4e00' <= char <= '\u9fff' for char in user_input):
-            ai_in = dict_prompt + user_input
-        else:
-            ai_in = dict_prompt + user_input
-    else:
-        ai_in = sentence_prompt + user_input
+def get_spark_response(user_input):
     url = "https://spark-api-open.xf-yun.com/v1/chat/completions"
     data = {
-            "model": "general",
-            "messages": [
-                {
-                    "role": 'user',
-                    "content": ai_in
-                }
-            ],
-                "stream": False
-        }
+        "model": "general",
+        "messages": [
+            {
+                "role": 'user',
+                "content": user_input
+            }
+        ],
+        "stream": False
+    }
     header = {
-         "Authorization": authorization,
+        "Authorization": authorization,
     }
 
     response = requests.post(url, headers=header, json=data)
@@ -177,10 +147,11 @@ def get_spark_response(user_input):  # 获取讯飞API返回的流数据
     try:
         response_data = response.json()
         content = response_data['choices'][0]['message']['content']
-        print(content)
-        return Response(content, content_type="text/plain; charset=utf-8")
-    except:
-        print("request failed")
+        # print(content)
+        return content  # 返回字符串
+    except Exception as e:
+        print("request failed", e)
+        return "Error: Unable to get response from Spark API"
 
 
 def get_random_bv():
@@ -316,7 +287,7 @@ def aipage():
     if 'user_id' not in session:
         flash('You need to log in to access the dashboard.', 'warning')
         return redirect(url_for('login'))
-    return render_template('ai_dict.html')
+    return render_template('aichat.html')
 
 @app.route('/dashboard')
 def dashboard():
@@ -327,7 +298,14 @@ def dashboard():
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM notifications ORDER BY time DESC')
         notifications = cursor.fetchall()
-    return render_template('dashboard.html', notifications=notifications)
+        
+        # 获取用户头像路径
+        cursor.execute('SELECT avatar_route FROM users WHERE id = ?', (session['user_id'],))
+        result = cursor.fetchone()
+        if result:
+            avatar_route = result[0]
+        
+    return render_template('dashboard.html', notifications=notifications, avatar_route="avatar/"+avatar_route)
 
 @app.route('/logout')
 def logout():
@@ -341,18 +319,20 @@ def hit():
     return render_template('hit.html')
     
 
-@app.route("/searchaidict", methods=["GET", "POST"])
+@app.route("/get_ai", methods=["GET", "POST"])
 def AiChat():
     if request.method == "POST":
-        user_input = request.json.get("word")
+        user_input = request.json.get("q")
     else:
-        user_input = request.args.get("word")
+        user_input = request.args.get("q")
         
     if not user_input:
-        return jsonify({"error": "Message is required"}), 400 # error messages printed in the console
+        return jsonify({"error": "Message is required"}), 400  # error messages printed in the console
     
     # 获取讯飞API返回的流数据
-    return get_spark_response(user_input)
+    spark_response = get_spark_response(user_input)
+    html_response = markdown.markdown(spark_response, extensions=[FencedCodeExtension()])
+    return html_response
 
 
 @app.route('/random_bv', methods=['GET'])
@@ -432,6 +412,144 @@ def bkend():
     else:
         return "访问无效"
 
+
+#profile page
+@app.route('/settings/profile')
+def profile():
+    if 'user_id' not in session:
+        flash('You need to log in to access the dashboard.', 'warning')
+        return redirect(url_for('login'))
+    with sqlite3.connect('app.db') as conn:
+        cursor = conn.cursor()
+        # 获取用户头像路径
+        cursor.execute('''
+        SELECT avatar_route, bio, sex, birthday, email, classroom
+        FROM users
+        WHERE id = ?
+    ''', (session['user_id'],))
+        result = cursor.fetchone()
+        if result:
+            avatar_route = result[0]
+            bio = result[1]
+            sex = result[2]
+            birthday = result[3]
+            email = result[4]
+            classroom = result[5]
+    return render_template('profile.html', avatar_route="/avatar/"+avatar_route, bio = bio, sex = sex, birthday = birthday, email = email, classroom = classroom)
+
+
+@app.route('/settings/update_profile', methods=['POST'])
+def update_profile():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 401  # 返回 JSON
+
+    user_id = session['user_id']
+
+    # 获取表单数据
+    username = request.form.get('username')
+    bio = request.form.get('bio')
+    sex = request.form.get('sex')
+    birthday = request.form.get('birthday')
+    email = request.form.get('email')
+    classroom = request.form.get('classroom')
+
+    # 处理文件上传
+    avatar = request.files.get('avatar')
+    avatar_filename = None
+
+    if avatar and avatar.filename != '':
+        # 生成随机文件名
+        random_filename = str(uuid.uuid4()) + os.path.splitext(avatar.filename)[1]
+        avatar_path = os.path.join(app.config['USERS_SETTING'], 'avatar', random_filename)
+        
+        # 保存文件
+        avatar.save(avatar_path)
+        avatar_filename = random_filename
+
+        # 删除旧的头像文件（除了 noface.jpg）
+        conn = sqlite3.connect('app.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT avatar_route FROM users WHERE id = ?', (user_id,))
+        old_avatar = cursor.fetchone()
+        if old_avatar and old_avatar[0] != 'noface.jpg':
+            old_avatar_path = os.path.join(app.config['USERS_SETTING'], 'avatar', old_avatar[0])
+            if os.path.exists(old_avatar_path):
+                os.remove(old_avatar_path)
+
+    # 更新数据库
+    conn = sqlite3.connect('app.db')
+    cursor = conn.cursor()
+
+    if avatar_filename:
+        # 如果有新头像，更新头像路径
+        cursor.execute('''
+            UPDATE users
+            SET username = ?, bio = ?, sex = ?, birthday = ?, email = ?, classroom = ?, avatar_route = ?
+            WHERE id = ?
+        ''', (username, bio, sex, birthday, email, classroom, avatar_filename, user_id))
+    else:
+        # 如果没有新头像，只更新其他信息
+        cursor.execute('''
+            UPDATE users
+            SET username = ?, bio = ?, sex = ?, birthday = ?, email = ?, classroom = ?
+            WHERE id = ?
+        ''', (username, bio, sex, birthday, email, classroom, user_id))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    # 更新 session 中的用户名和头像路径
+    session['username'] = username
+    if avatar_filename:
+        session['avatar_route'] = avatar_filename
+
+    # 返回成功响应
+    return jsonify({'success': True, 'message': 'Profile updated successfully'})
+
+@app.route('/user/<int:user_id>')
+def view_profile(user_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))  # 如果用户未登录，重定向到登录页面
+
+    # 连接数据库
+    conn = sqlite3.connect('app.db')
+    cursor = conn.cursor()
+
+    # 查询目标用户的详细信息
+    cursor.execute('''
+        SELECT avatar_route, username, bio, sex, birthday, email, classroom
+        FROM users
+        WHERE id = ?
+    ''', (user_id,))
+    result = cursor.fetchone()  # 获取查询结果
+
+    if result:
+        # 解包查询结果
+        avatar_route, username, bio, sex, birthday, email, classroom = result
+    else:
+        # 如果没有找到用户，返回 404 错误
+        return "User not found", 404
+    cursor.execute('SELECT avatar_route FROM users WHERE id = ?', (session['user_id'],))
+    result = cursor.fetchone()
+    if result:
+        mavatar_route = result[0]
+    # 关闭数据库连接
+    cursor.close()
+    conn.close()
+
+    # 渲染模板并传递目标用户的信息
+    return render_template(
+        'users.html',
+        uavatar_route="/avatar/"+avatar_route,
+        username=username,
+        bio=bio,
+        sex=sex,
+        birthday=birthday,
+        email=email,
+        classroom=classroom,
+        mavatar_route="/avatar/"+mavatar_route
+    )
 
 @app.route('/chat', methods=['GET'])
 def render_chat():
@@ -569,6 +687,11 @@ def uploaded_bv(filename):
 def uploaded_file(user, filename):
     return send_from_directory(os.path.join(app.config['UPLOAD_FOLDER'], user), filename)
 
+@app.route('/avatar/<avname>')
+def avatar_file(avname):
+    return send_from_directory(os.path.join(app.config['USERS_SETTING'], 'avatar'), avname)
+
 if __name__ == '__main__':
+    init_folders()
     init_db()
     socketio.run(app, host='0.0.0.0', debug=True, port=1002)

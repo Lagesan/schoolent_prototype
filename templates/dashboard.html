@@ -4,61 +4,36 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="\static\obs_style.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
     <title>Dashboard</title>
     <style>
         main {
             padding: 20px;
         }
-
-        .notification-container {
-            display: flex;
-            flex-direction: column;
-            gap: 20px; 
-            margin-top: 20px;
-        }
-
-        .notification {
-            background-color: #f9f9f9;
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            border: 1px solid #ddd;
-        }
-
-        .notification-title {
-            font-weight: bold;
-            font-size: xx-large;
-            color: #333;
-            margin-bottom: 5px;
-        }
-
-        .notification-content {
-            color: #555;
-            margin-bottom: 10px;
-        }
-
-        .notification-timestamp {
-            font-size: 12px;
-            color: #888;
-        }
-
     </style>
 </head>
 <body>
     <header>
-        <img src={{ url_for('static', filename='logo_schoolent.png') }} alt="" width="3%" height=auto style="margin-right: 1%;">
-        <h1>Dashboard</h1>
+        <a href="/dashboard" style="text-decoration: none; color: inherit;">
+            <div class="header-left">
+                <img src="{{ url_for('static', filename='logo_schoolent.png') }}" alt="Logo">
+                <h1 class="font-tech">Dashboard</h1>
+            </div>
+        </a>
+        <div class="user-info" id="avatar-img">
+            <img src="{{ avatar_route }}" alt="头像">
+            <span>{{ session['username'] }}</span>
+        </div>
     </header>
+
     <nav>
         <a href="/chat">Chat</a>
-        <a href="/sparkai" target="_blank">Dictionary</a>
-        <a href="/b_dl">B站视频下载</a>
+        <a href="/sparkai">AI Chat</a>
         {% if 'username' in session and session['username'] == "David Zhang" %}
         <a href="/bkend">Backend</a>
         {% endif %}
-        <a href="/logout">Logout</a>
-        
     </nav>
+
     <main>
         <h2>Notifications</h2>
         <div class="notification-container">
@@ -71,5 +46,34 @@
             {% endfor %}
         </div>
     </main>
+    <div class="user-menu" id="user-menu">
+        <div class="menu-header">
+            <img src="{{ avatar_route }}" alt="头像">
+            <span>{{ session['username'] }}</span>
+        </div>
+        <ul class="menu-items">
+            <li><a href="/dashboard"><i class="iconfont home" style="font-size: 25px;margin-right: 5px;"></i>Home</a></li>
+            <li><a href="/settings/profile"><i class="iconfont profile" style="font-size: 24px;margin-right: 5px;"></i>Profile</a></li>
+            <li><a href="/b_dl"><i class="iconfont tv" style="font-size: 24px;margin-right: 5px;"></i>Study resources download</a></li>
+            <li><a href="/logout"><i class="iconfont logout" style="font-size: 24px;margin-right: 5px;"></i>Logout</a></li>
+        </ul>
+    </div>
+
+    <script>
+        document.getElementById('avatar-img').addEventListener('click', function(event) {
+            var userMenu = document.getElementById('user-menu');
+            userMenu.classList.toggle('show');
+            event.stopPropagation(); // 阻止事件冒泡，防止触发 body 上的点击事件
+        });
+
+        // 点击 body 上的其他区域隐藏菜单
+        document.body.addEventListener('click', function(event) {
+            var userMenu = document.getElementById('user-menu');
+            // 检查点击的是否是头像或菜单，若不是则关闭菜单
+            if (!userMenu.contains(event.target) && !document.getElementById('avatar-img').contains(event.target)) {
+                userMenu.classList.remove('show');
+            }
+        });
+    </script>
 </body>
 </html>

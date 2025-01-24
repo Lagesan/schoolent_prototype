@@ -11,7 +11,9 @@ This is a prototype of Schoolent Web edition based on Flask.
 - Socket.IO for real-time communication
 - Marked.js for markdown rendering
 - Bilibili video download
-- ......
+- User profile management with avatar upload
+- Backend management for admin users
+- Video conversion using FFmpeg
 
 ## Installation
 
@@ -43,19 +45,23 @@ This is a prototype of Schoolent Web edition based on Flask.
     ```bash
     python server.py
     ```
-2. Edit settings in `server.set`(it will be created after you first run server.py)
-    Setting example(meaningless API key): 
-    `authorization=Bearer AEOuoKKfZsasdNQ:kDmSDCDBsfcd`
+2. Edit settings in [server.set](http://_vscodecontentref_/1) (it will be created after you first run [server.py](http://_vscodecontentref_/2)).
+    Setting example (meaningless API key): 
+    [authorization=Bearer AEOuoKKfZsasdNQ:kDmSDCDBsfcd](http://_vscodecontentref_/3)
 
-2. Open your web browser and navigate to `http://localhost:1002`.
+3. Open your web browser and navigate to `http://localhost:1002`.
 
 ## Project Structure
 
-- `server.py`: Main application file containing routes and logic.
-- `templates/`: Directory containing HTML templates.
-- `uploads/`: Directory for uploaded files.
-- `app.db`: SQLite database file.(generated automatically)
-- `server.set`: server settings, it is only used to set Spark Lite LLM api(generated automatically)
+- [server.py](http://_vscodecontentref_/4): Main application file containing routes and logic.
+- [templates](http://_vscodecontentref_/5): Directory containing HTML templates.
+- [uploads](http://_vscodecontentref_/6): Directory for uploaded files.
+- [app.db](http://_vscodecontentref_/7): SQLite database file (generated automatically).
+- [server.set](http://_vscodecontentref_/8): Server settings, used to set Spark Lite LLM API (generated automatically).
+- [chat](http://_vscodecontentref_/9): Directory for private chat files.
+- [users](http://_vscodecontentref_/10): Directory for user settings, including avatars.
+- [gv](http://_vscodecontentref_/11): Directory for Bilibili video downloads.
+
 ## Dependencies
 
 - Flask
@@ -63,8 +69,13 @@ This is a prototype of Schoolent Web edition based on Flask.
 - SQLite
 - Requests
 - Marked.js
-- working stably on Python 3.6.5
-- work well on ffmpeg 4.2.2
+- Python （above 3.6）
+- FFmpeg 4.2.2
+
+## Others
+**Fonts**:
+- [Pacifico](https://fonts.google.com/specimen/Pacifico)
+- [iconfont](https://www.iconfont.cn/) (We use several iconfonts from it)
 
 ## License
 
@@ -76,8 +87,6 @@ We are thinking about it.
 - [Socket.IO](https://socket.io/)
 - [Marked.js](https://marked.js.org/)
 - [Spark API](https://spark-api-open.xf-yun.com/)
-
-
 
 ## Reference
 - Bilibili API: [click here](https://www.bilibili.com/opus/552172175376927649)

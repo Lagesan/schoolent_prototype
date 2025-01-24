@@ -23,3 +23,5 @@ __pycache__/
 uploads/
 staff.txt
 *.set
+chat/
+users/

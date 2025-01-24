@@ -4,18 +4,40 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Home</title>
-    <link rel="stylesheet" href="static\obs_style.css">
+    <link rel="stylesheet" href="static/obs_style.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
+    <style>
+        /* header set, align left, make all the elements on the header display on the left */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 15px;
+            background-color: #ffffff;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        header img {
+            width: 3%;
+            height: auto;
+            margin-right: 1%;
+        }
+
+        header h2 {
+            font-family: 'Pacifico', cursive;
+            margin: 0; /* 去除默认的 margin */
+        }
+    </style>
 </head>
 <body>
     <header>
-        <img src={{ url_for('static', filename='logo_schoolent.png') }} alt="" width="3%" height=auto style="margin-right: 1%;">
-        <h2>Schoolent PROTOTYPE</h2>
+        <img src="{{ url_for('static', filename='logo_schoolent.png') }}" alt="Logo">
+        <h2>Schoolent</h2><span style="margin-left: 10px; margin-top: 6px; font-size: large; font-weight: 750;">PROTOTYPE</span>
     </header>
     <br><br><br>
     <div id="choice" align="center">
         <a href="/login"><button style="font-size: xx-large; padding: 60px 80px;">Login</button></a>
         <a href="/register"><button style="font-size: xx-large; padding: 60px 65px;">Register</button></a>
     </div>
-
 </body>
 </html>

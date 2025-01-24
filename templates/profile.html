@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
+    <link rel="stylesheet" href="\static\obs_style.css">
+    <title>Profile</title>
+    <style>
+        .profile-header {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+            background-color: #ffffff;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .profile-avatar {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            margin-right: 20px;
+            border: 1px solid #007bff;
+        }
+
+        .profile-details {
+            flex-grow: 1;
+        }
+
+        .profile-details h2 {
+            margin: 0;
+            font-size: 24px;
+            color: #333;
+        }
+
+        .profile-details p {
+            margin: 5px 0;
+            color: #555;
+        }
+
+        .profile-stats { /* 用户统计信息followers... */
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+        }
+
+        .profile-stats div {
+            text-align: center;
+        }
+
+        .profile-stats span {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .profile-stats p {
+            margin: 0;
+            font-size: 14px;
+            color: #777;
+        }
+
+        .profile-info {
+            padding: 20px;
+            background-color: #ffffff;
+            margin: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .profile-info h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .profile-info p {
+            margin: 5px 0;
+            color: #555;
+        }
+
+        .profile-info .password {
+            color: #888;
+            font-style: italic;
+        }
+
+        
+    /* 编辑表单样式 */
+    .edit-form {
+            display: none; /* 默认隐藏编辑表单 */
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .edit-form input,
+        .edit-form textarea,
+        .edit-form select {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        .edit-form button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .edit-form button:hover {
+            background-color: #0056b3;
+        }
+
+        .edit-button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+
+        .edit-button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <a href="/dashboard" style="text-decoration: none; color: inherit;">
+            <div class="header-left">
+                <img src="{{ url_for('static', filename='logo_schoolent.png') }}" alt="Logo">
+                <h1>Profile</h1>
+            </div>
+        </a>
+        <div class="user-info" id="avatar-img">
+            <img src="{{ avatar_route }}" alt="头像">
+            <span>{{ session['username'] }}</span>
+        </div>
+    </header>
+    <div class="user-menu" id="user-menu">
+        <div class="menu-header">
+            <img src="{{ avatar_route }}" alt="头像">
+            <span>{{ session['username'] }}</span>
+        </div>
+        <ul class="menu-items">
+            <li><a href="/dashboard"><i class="iconfont home" style="font-size: 25px;margin-right: 5px;"></i>Home</a></li>
+            <li><a href="/settings/profile"><i class="iconfont profile" style="font-size: 24px;margin-right: 5px;"></i>Profile</a></li>
+            <li><a href="/b_dl"><i class="iconfont tv" style="font-size: 24px;margin-right: 5px;"></i>Study resources download</a></li>
+            <li><a href="/logout"><i class="iconfont logout" style="font-size: 24px;margin-right: 5px;"></i>Logout</a></li>
+        </ul>
+    </div>
+    <main>
+        <div class="profile-header">
+            <img src="{{ avatar_route }}" alt="头像" class="profile-avatar" id="profile-avatar">
+            <div class="profile-details">
+                <h2>{{ session['username'] }}</h2>
+                <p>{{ bio if bio else 'No bio available' }}</p>
+            </div>
+        </div>
+        <div class="profile-info">
+            <h3>User Information</h3>
+            <p><strong>Bio:</strong> {{ bio if bio else 'None' }}</p>
+            <p><strong>Sex:</strong> {{ sex if sex else 'None' }}</p>
+            <p><strong>Birthday:</strong> {{ birthday if birthday else 'None' }}</p>
+            <p><strong>Email:</strong> {{ email if email else 'None' }}</p>
+            <p><strong>Classroom:</strong> {{ classroom if classroom else 'None' }}</p>
+            <p class="password"><strong>Password:</strong> ********</p><span style="font-size: x-small;"> We're trying to develop the password reset function</span>
+        </div>
+
+        <!-- 编辑按钮 -->
+        <button class="edit-button" onclick="toggleEditForm()">Edit Profile</button>
+
+        <!-- 编辑表单 -->
+        <div class="edit-form" id="edit-form">
+            <form id="profile-form" method="POST" enctype="multipart/form-data">
+                <!-- username ,限制输入40字-->
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" value="{{ session['username'] }}" maxlength="40">
+                
+                <!-- 头像上传 -->
+                <label for="avatar">Avatar:</label>
+                <input type="file" id="avatar" name="avatar" accept="image/*">
+                
+                <label for="bio">Bio:</label>
+                <textarea id="bio" name="bio">{{ bio if bio else '' }}</textarea>
+                
+                <label for="sex">Sex:</label>
+                <select id="sex" name="sex">
+                    <option value="Male" {{ 'selected' if sex == 'Male' else '' }}>Male</option>
+                    <option value="Female" {{ 'selected' if sex == 'Female' else '' }}>Female</option>
+                    <option value="Other" {{ 'selected' if sex == 'Other' else '' }}>Other(Maybe you are a helicopter?)</option>
+                </select>
+        
+                <label for="birthday">Birthday:</label>
+                <input type="date" id="birthday" name="birthday" value="{{ birthday if birthday else '' }}">
+        
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" value="{{ email if email else '' }}">
+        
+                <label for="classroom">Classroom:</label>
+                <input type="text" id="classroom" name="classroom" value="{{ classroom if classroom else '' }}">
+        
+                <button type="submit">Save Changes</button>
+            </form>
+        </div>
+    </main>
+    <script>
+        // 切换编辑表单的显示和隐藏
+        function toggleEditForm() {
+            var editForm = document.getElementById('edit-form');
+            if (editForm.style.display === 'none' || editForm.style.display === '') {
+                editForm.style.display = 'block';
+            } else {
+                editForm.style.display = 'none';
+            }
+        }
+
+        // 菜单栏的逻辑保持不变
+        document.getElementById('avatar-img').addEventListener('click', function(event) {
+            var userMenu = document.getElementById('user-menu');
+            userMenu.classList.toggle('show');
+            event.stopPropagation();
+        });
+
+        document.body.addEventListener('click', function(event) {
+            var userMenu = document.getElementById('user-menu');
+            if (!userMenu.contains(event.target) && !document.getElementById('avatar-img').contains(event.target)) {
+                userMenu.classList.remove('show');
+            }
+        });
+
+        document.getElementById('profile-form').addEventListener('submit', function(event) {
+            event.preventDefault(); // 阻止表单默认提交行为
+
+            var formData = new FormData(this); // 获取表单数据
+
+            fetch('/settings/update_profile', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json(); // 尝试解析为 JSON
+            })
+            .then(data => {
+                if (data.success) {
+                    window.location.reload(); // 强制刷新页面
+                } else {
+                    alert('Failed to update profile: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while updating the profile.');
+            });
+        });
+    </script>
+</body>
+</html>

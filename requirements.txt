@@ -4,4 +4,5 @@ requests==2.26.0
 python-socketio==5.5.2
 eventlet==0.33.0
 sqlite3==3.36.0
-yt_dlp==2022.7.18
+yt_dlp==2025.1.15
+Markdown==3.7

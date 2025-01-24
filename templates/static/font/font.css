@@ -1,7 +1,7 @@
 @font-face {
     font-family: "iconfont"; 
     src: 
-    url('send.ttf') format('truetype');
+    url('font.ttf') format('truetype');
   }
   
   .iconfont {
@@ -12,6 +12,18 @@
     -moz-osx-font-smoothing: grayscale;
   }
   
+  .logout:before {
+    content: "\e66b";
+  }
+  
+  .home:before {
+    content: "\e601";
+  }
+  
+  .profile:before {
+    content: "\e60e";
+  }
+  
   .back:before {
     content: "\e600";
   }
@@ -19,4 +31,12 @@
   .icon-send:before {
     content: "\e856";
   }
-  
+  .tv:before {
+    content: "\e63e";
+  }
+  @font-face {
+    font-family: 'Pacifico';
+    src: url('Pacifico-Regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}

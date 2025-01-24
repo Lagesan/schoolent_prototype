@@ -3,14 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="\static\obs_style.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='obs_style.css') }}">
     <title>Backend</title>
     <style>
+        header {
+            background-color: #ffffff;
+            color: #333;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center; /* 垂直居中 */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center; /* 垂直居中 */
+        }
+
+        .header-left img {
+            width: 30px; /* 固定宽度 */
+            height: 30px; /* 固定高度 */
+            margin-right: 10px; /* 与标题的间距 */
+        }
+
+        .header-left h1 {
+            font-size: 24px;
+            margin: 0; /* 去除默认的 margin */
+            color: #333;
+        }
         .layout {
             display: flex;
             justify-content: space-between;
             padding: 20px;
+            gap: 20px;
         }
 
         .left, .right {
@@ -23,18 +52,10 @@
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             border: 1px solid #ddd;
-            margin-bottom: 2%;
+            margin-bottom: 20px;
         }
 
-        .user-list {
-            max-height: 300px;
-            overflow-y: auto;
-            border: 1px solid #ccc;
-            padding: 10px;
-            margin-top: 10px;
-        }
-
-        .log-list {
+        .user-list, .log-list {
             max-height: 300px;
             overflow-y: auto;
             border: 1px solid #ccc;
@@ -47,12 +68,6 @@
             width: 100%;
             height: 100vh;
             border: none;
-        }
-
-        form {
-            width: 60%;
-            margin: 0 auto;
-            padding: 20px;
         }
 
         .textarea-container {
@@ -78,7 +93,7 @@
         }
 
         .send-button {
-            background-color: rgb(204, 204, 204);
+            background-color: #ccc;
             color: #fff;
             border: none;
             border-radius: 50%;
@@ -94,25 +109,66 @@
             background-color: #007bff;
             cursor: pointer;
         }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .action-buttons button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .action-buttons button#delete-gv-button {
+            background-color: #ff4d4d;
+            color: white;
+        }
+
+        .action-buttons button#shutdown {
+            background-color: #f72c7a;
+            color: white;
+        }
+
+        .action-buttons button#restart-button {
+            background-color: #007bff;
+            color: white;
+        }
     </style>
 </head>
 <body>
     <header>
-        <a href="{{ url_for('dashboard') }}" style="color: inherit;text-decoration: none;"><i class="iconfont back" style="font-size: 20px;"></i></a>
-        <img src={{ url_for('static', filename='logo_schoolent.png') }} alt="" width="3%" height=auto style="margin-right: 1%;">
-        <h1>Backend</h1>
+        <div class="header-left">
+            <a href="{{ url_for('dashboard') }}" style="color: inherit; text-decoration: none;">
+                <i class="iconfont back" style="font-size: 20px; margin-right: 10px;"></i>
+            </a>
+            <img src="{{ url_for('static', filename='logo_schoolent.png') }}" alt="Logo" width="30" height="30" style="margin-right: 10px;">
+            <h1 style="margin: 0;" class="font-tech">Backend</h1>
+        </div>
     </header>
     <div class="layout">
+        <!-- 左侧内容 -->
         <div class="left">
+            <!-- 在线用户 -->
             <div class="msgbox">
                 <h2 class="online-users" id="online-users">Online Users: 0</h2>
             </div>
+
+            <!-- 操作按钮 -->
             <div class="msgbox">
-                <button id="delete-gv-button">删除B站视频缓存</button>
-                <button id="shutdown" style="background-color: rgb(247, 44, 122);">终止服务器</button>
-                <button id="restart-button">重启服务器</button>
+                <div class="action-buttons">
+                    <button id="delete-gv-button">删除B站视频缓存</button>
+                    <button id="shutdown">终止服务器</button>
+                    <button id="restart-button">重启服务器</button>
+                </div>
             </div>
-            <div class="msgbox" style="background-color: white;">
+
+            <!-- 通知表单 -->
+            <div class="msgbox">
                 <form action="{{ url_for('bkend') }}" method="post">
                     <div class="textarea-container">
                         <textarea id="title" name="title" required placeholder="Enter notification title"></textarea>
@@ -125,27 +181,32 @@
                     </div>
                 </form>
             </div>
+
+            <!-- 用户列表 -->
             <div class="msgbox user-list" id="user-list">
                 <h2>Users</h2>
                 <div id="users"></div>
             </div>
-            <div class="msgbox log-list" id="log-list">
-                <h2>Logs</h2>
-                <div id="logs"></div>
-            </div>
         </div>
+
+        <!-- 右侧内容 -->
         <div class="right">
             <iframe src="/chat?embed=true"></iframe>
         </div>
     </div>
+
+    <!-- 脚本 -->
     <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
     <script>
         const socket = io('http://' + window.location.hostname + ':1002');
         const onlineUsers = document.getElementById('online-users');
+
+        // 更新在线用户数量
         socket.on('update_online_users', function(data) {
             onlineUsers.textContent = `Online Users: ${data.count}`;
         });
 
+        // 日志消息
         socket.on('log_message', function(data) {
             const logsElement = document.getElementById('logs');
             const logEntry = document.createElement('p');
@@ -153,8 +214,8 @@
             logsElement.appendChild(logEntry);
             logsElement.scrollTop = logsElement.scrollHeight;
         });
-    </script>
-    <script>
+
+        // 删除B站视频缓存
         document.getElementById('delete-gv-button').addEventListener('click', function() {
             if (confirm('Are you sure you want to delete the GV folder? This action cannot be undone.')) {
                 fetch('/delete_gv_folder', { method: 'POST' })
@@ -172,6 +233,7 @@
             }
         });
 
+        // 重启服务器
         document.getElementById('restart-button').addEventListener('click', function() {
             if (confirm('Are you sure you want to restart the server? This action cannot be undone.')) {
                 fetch('/restart', { method: 'POST' })
@@ -189,6 +251,7 @@
             }
         });
 
+        // 终止服务器
         document.getElementById('shutdown').addEventListener('click', function() {
             if (confirm('Are you sure you want to shut down the server? This action cannot be undone.')) {
                 fetch('/shutdown', { method: 'POST' })
@@ -206,6 +269,7 @@
             }
         });
 
+        // 获取用户列表
         function fetchUsers() {
             fetch('/get_users')
                 .then(response => response.json())
@@ -225,8 +289,9 @@
                 });
         }
 
-        fetchUsers(); // Fetch users on page load
+        fetchUsers(); // 页面加载时获取用户列表
 
+        // 更新发送按钮状态
         const titleInput = document.getElementById('title');
         const contentInput = document.getElementById('content');
         const sendButton = document.getElementById('send-button');
@@ -239,7 +304,6 @@
             }
         }
 
-        // 监听输入事件
         titleInput.addEventListener('input', updateSendButton);
         contentInput.addEventListener('input', updateSendButton);
     </script>

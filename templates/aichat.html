@@ -3,161 +3,135 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spark Lite AI</title>
+    <title>AI Chat</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='obs_style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+            background-color: #f9f9f9;
             display: flex;
             flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            background-color: #007bff;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            display: flex;
+            justify-content: space-between;
             align-items: center;
-            padding: 20px;
         }
 
-        #chat-box {
-            width: 100%;
-            max-width: 80%;
-            height: 525px;
-            border: 1px solid #ccc;
-            background-color: #fff;
-            overflow-y: scroll;
-            padding: 20px;
-            margin-bottom: 20px;
-            border-radius: 10px;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-start;
-        }
-
-        .message {
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 10px;
-            max-width: 80%;
-        }
-
-        .user {
-            background-color: #d9f7be;
-            align-self: flex-end;
-        }
-
-        .ai {
-            background-color: #e6f7ff;
-            align-self: flex-start;
-        }
-
-        #input-container {
-            display: flex;
-            width: 100%;
-            max-width: 600px;
-        }
-
-        #input-box {
-            width: 80%;
-            padding: 10px;
-            font-size: 16px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-        #button_b {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background-color: #007bff;
+        header a {
             color: white;
-            padding: 10px 20px;
             text-decoration: none;
-            border-radius: 5px;
-            border: none;
-        }
-        #send-button {
-            width: 20%;
             font-size: 16px;
-            background-color: #007bff;
-            color: white;
+            margin: 0 10px;
+        }
+
+
+        .textarea-container {
+            position: relative;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            background-color: #f4f4f4;
+            border: 1px solid #ccc;
+            border-radius: 25px;
+            padding: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .textarea-container textarea {
             border: none;
-            margin-left: 20px;
-            border-radius: 50px;
+            background: transparent;
+            flex: 1;
+            font-size: 16px;
+            padding: 0 10px;
+            outline: none;
+            resize: none;
+        }
+
+        .send-button {
+            background-color: rgb(204, 204, 204);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 35px;
+            height: 35px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: not-allowed;
+        }
+
+        .send-button.active {
+            background-color: #007bff;
             cursor: pointer;
         }
-
-        #send-button:hover {
-            background-color: #0056b3;
-        }
     </style>
-  <script src="{{ url_for('static', filename='js/marked/marked.min.js') }}"></script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
-
 </head>
 <body>
-    <a href="{{ url_for('dashboard') }}"><button id="button_b">Previous</button></a>
-
-    <div id="chat-box"></div>
-
-    <div id="input-container">
-        <input type="text" id="input-box" placeholder="Type your message..."/>
-        <button id="send-button" onclick="sendMessage()"><i class="iconfont icon-send" style="font-size: 18px;"></i></button>
-    </div>
-    <p style="margin-bottom: 1px;font-size: x-small;">由于平板浏览器限制，请至QQ邮箱内置浏览器使用</p>
-
+    <header>
+        <a href="{{ url_for('dashboard') }}" style="color: inherit;text-decoration: none;"><i class="iconfont back" style="font-size: 20px;"></i></a>
+        <span style="font-size: large;">created with <strong>SparkAI Lite</strong></span>
+    </header>
+    <main style="text-align: center;">
+        <section>
+            <form id="askForm" action="/get_ai" method="post">
+                <div class="textarea-container">
+                    <textarea id="content" name="content" required placeholder="Ask anything..."></textarea>
+                    <button class="send-button" id="send-button" type="submit">
+                        <i class="iconfont icon-send" style="font-size: 18px;"></i>
+                    </button>
+                </div>
+            </form>
+        </section>
+        <section id="resultSection">
+        </section>
+    </main>
     <script>
-        async function sendMessage() {
-            const messageBox = document.getElementById('input-box');
-            const btn_send = document.getElementById('send-button');
-            const userMessage = messageBox.value.trim();
+        document.getElementById('askForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const content = document.getElementById('content').value.trim();
+            const sendButton = document.getElementById('send-button');
+            sendButton.classList.remove('active');
+            sendButton.disabled = true;
+            document.getElementById('content').value = '';
+            fetch(`/get_ai?q=${encodeURIComponent(content)}`)
+                .then(response => response.text())
+                .then(data => {
+                    console.log(data);
+                    const resultSection = document.getElementById('resultSection');
+                    resultSection.innerHTML = ''; // Clear previous results
+                    resultSection.innerHTML = data;
+                })
+                .catch(error => console.error('Error:', error));
+        });
 
-            if (!userMessage) return;
-            appendMessage(userMessage, 'user');
-            btn_send.disabled = true;
-            messageBox.value = '';
+        const contentInput = document.getElementById('content');
+        const sendButton = document.getElementById('send-button');
 
-            try {
-                const response = await fetch('/aichat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ message: userMessage }),
-                });
-
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let done = false;
-                let aiMessage = '';
-
-                while (!done) {
-                    const { value, done: doneReading } = await reader.read();
-                    done = doneReading;
-
-                    aiMessage += decoder.decode(value, { stream: false });
-                }
-
-                appendMessage(aiMessage, 'ai');
-                btn_send.disabled = false;
-            } catch (error) {
-                console.error('Error:', error);
-                appendMessage('Sorry, there was an error. Please try again later.', 'ai');
+        function updateSendButton() {
+            if (contentInput.value.trim()) {
+                sendButton.classList.add('active');
+                sendButton.disabled = false;
+            } else {
+                sendButton.classList.remove('active');
+                sendButton.disabled = true;
             }
         }
-    
-        function appendMessage(message, sender) {
-            const chatBox = document.getElementById('chat-box');
-            const messageElement = document.createElement('div');
-            messageElement.classList.add('message', sender);
 
-            // 使用marked库将Markdown转化为HTML
-            messageElement.innerHTML =  marked.parseInline(message);
-            chatBox.appendChild(messageElement);
+        // 监听输入事件
+        contentInput.addEventListener('input', updateSendButton);
 
-            // Scroll to the bottom of the chat box
-            chatBox.scrollTop = chatBox.scrollHeight;
-        }
-
+        // 初始化按钮状态
+        updateSendButton();
     </script>
-    
 </body>
 </html>
