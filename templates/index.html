@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Home</title>
-    <link rel="stylesheet" href="static/obs_style.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='obs_style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
     <style>
         /* header set, align left, make all the elements on the header display on the left */
@@ -32,7 +32,7 @@
 <body>
     <header>
         <img src="{{ url_for('static', filename='logo_schoolent.png') }}" alt="Logo">
-        <h2>Schoolent</h2><span style="margin-left: 10px; margin-top: 6px; font-size: large; font-weight: 750;">PROTOTYPE</span>
+        <h2 class="font-tech" style="font-weight: 800;">Schoolent</h2><span style="margin-left: 11px; font-size: 24px; font-weight: 800;">PROTOTYPE</span>
     </header>
     <br><br><br>
     <div id="choice" align="center">

@@ -12,6 +12,7 @@ dist/
 build/
 gv/
 __pycache__/
+.venv/
 
 # Ignore temporary files
 *.tmp
