@@ -5,75 +5,487 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="\static\obs_style.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
+    <script src="{{ url_for('static', filename='js/popup.js') }}" defer></script>
     <title>Dashboard</title>
     <style>
+        /* 原有样式保持不变 */
         main {
             padding: 20px;
+        }
+        .schedule-container {
+            background-color: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            max-width: 1200px;
+            margin: 20px auto;
+        }
+        .schedule-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .schedule-header h2 {
+            margin: 0;
+            font-size: 1.8em;
+            color: #444;
+        }
+        .schedule-header .nav-buttons button {
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 20px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .schedule-header .nav-buttons button:hover {
+            background-color: #0056b3;
+        }
+        .schedule {
+            display: flex;
+            justify-content: space-between;
+        }
+        .task {
+            background-color: #fff;
+            border-left: 4px solid #007bff;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .task:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .task-personal {
+            background-color: #e3f2fd;
+            border-left-color: #64b5f6;
+        }
+        .task-urgent {
+            background-color: #ffebee;
+            border-left-color: #e57373;
+        }
+        .task-formal {
+            background-color: #f3e5f5;
+            border-left-color: #ba68c8;
+        }
+        .task-informal {
+            background-color: #fff3e0;
+            border-left-color: #ffb74d;
+        }
+        .day {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+            width: 18%;
+            transition: transform 0.2s ease;
+        }
+        .day:hover {
+            transform: translateY(-5px);
+        }
+        .day h3 {
+            font-size: 1.4em;
+            margin-bottom: 15px;
+            color: #444;
+            text-align: center;
+        }
+        .empty-message {
+            text-align: center;
+            color: #888;
+            font-size: 1.2em;
+            margin-top: 20px;
+        }
+        .notification-icon {
+            margin-right: 15px;
+            margin-top: 5px;
+            cursor: pointer;
+            color: #444;
+            text-decoration: none;
+        }
+        .notification-icon img {
+            width: 25px;
+            height: 25px;
+        }
+        .notification-content {
+            visibility: hidden;
+            position: fixed;
+            top: 0;
+            right: -500px;
+            width: 400px;
+            height: 100%;
+            background-color: #fff;
+            box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+            transition: right 0.3s ease;
+            padding: 20px;
+            z-index: 1002;
+            overflow-y: auto;
+        }
+        .notification-content.show {
+            visibility: visible;
+            right: 0;
+        }
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+        .overlay.show {
+            display: block;
+        }
+        .effect-button {
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+        .effect-button img {
+            width: 28px;
+            height: auto;
+        }
+        .content-wrapper {
+            transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            transform-origin: center;
+            min-height: 100vh;
+        }
+        .content-wrapper.effect-active {
+            border-radius: 5%;
+            border: #282828 solid 1px;
+            transform: translateX(-270px) translateY(-120px) rotateY(45deg) scale(0.7);
+            pointer-events: none;
+        }
+        .add-schedule-form {
+            /* hide */
+            display: none;
+        }
+        /* 新增特效侧边栏样式 */
+        .effect-sidebar {
+            position: fixed;
+            top: 0;
+            right: -500px;
+            width: 380px;
+            height: 100%;
+            background-color: #fff;
+            box-shadow: -2px 0 12px rgba(0, 0, 0, 0.1);
+            transition: right 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            padding: 20px;
+            z-index: 1001;
+            overflow-y: auto;
+        }
+        .effect-sidebar.active {
+            right: 0;
+        }
+        .effect-sidebar .add-schedule-form {
+            /* show */
+            display: block;
         }
     </style>
 </head>
 <body>
-    <header>
-        <a href="/dashboard" style="text-decoration: none; color: inherit;">
-            <div class="header-left">
-                <img src="{{ url_for('static', filename='logo_schoolent.png') }}" alt="Logo">
-                <h1 class="font-tech">Dashboard</h1>
-            </div>
-        </a>
-        <div class="user-info" id="avatar-img">
-            <img src="{{ avatar_route }}" alt="头像">
-            <span>{{ session['username'] }}</span>
-        </div>
-    </header>
+    <!-- 新增特效侧边栏 -->
+    <div class="effect-sidebar" id="effect-sidebar"></div>
 
-    <nav>
-        <a href="/chat">Chat</a>
-        <a href="/sparkai">AI Chat</a>
-        {% if 'username' in session and session['username'] == "David Zhang" %}
-        <a href="/bkend">Backend</a>
-        {% endif %}
-    </nav>
-
-    <main>
-        <h2>Notifications</h2>
-        <div class="notification-container">
-            {% for notification in notifications %}
-                <div class="notification">
-                    <div class="notification-title">{{ notification[1] }}</div>
-                    <div class="notification-content">{{ notification[2] }}</div>
-                    <div class="notification-timestamp">{{ notification[3] }}</div>
+    <div class="content-wrapper">
+        <header>
+            <a href="/dashboard" style="text-decoration: none; color: inherit;">
+                <div class="header-left">
+                    <img src="{{ url_for('static', filename='logo_schoolent.png') }}" alt="Logo">
+                    <h1 class="font-tech">Dashboard</h1>
                 </div>
-            {% endfor %}
+            </a>
+            <div class="user-info" id="avatar-img">
+                <div class="notification-icon" id="notification-icon">
+                    <img src="{{ url_for('static', filename='font/svg/noti.svg') }}" style="border: none;">
+                </div>
+                <img src="{{ avatar_route }}" alt="头像">
+                <span>{{ session['username'] }}</span>
+            </div>
+        </header>
+        <nav>
+            <a href="/chat">Chat</a>
+            <a href="/sparkai">AI Chat</a>
+            {% if 'username' in session and session['username'] == "David Zhang" %}
+            <a href="/bkend">Backend</a>
+            {% endif %}
+        </nav>
+
+        <main>
+            <div class="schedule-container">
+                <div class="schedule-header">
+                    <h2>2023年10月16日 - 2023年10月20日</h2>
+                    <div class="effect-button" id="effect-btn">
+                        <img src="{{ url_for('static', filename='font/svg/add_schedule.svg') }}" alt="add a new schedule">
+                    </div>
+                    <div class="nav-buttons">
+                        <button onclick="prevWeek()">上一周</button>
+                        <button onclick="nextWeek()">下一周</button>
+                    </div>
+                </div>
+                <div class="schedule" id="schedule-content">
+                    <div class="empty-message">Loading...</div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 原始表单容器 -->
+        <div class="add-schedule-form" id="original-form">
+            <h2>新增日程</h2>
+            <form id="add-schedule-form-submit">
+                <div class="form-group">
+                    <label for="title">标题</label>
+                    <input type="text" id="title" name="title" required>
+                </div>
+                <div class="form-group">
+                    <label for="content">内容</label>
+                    <textarea id="content" name="content" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="start_time">开始时间</label>
+                    <input type="datetime-local" id="start_time" name="start_time" required>
+                </div>
+                <div class="form-group">
+                    <label for="end_time">结束时间</label>
+                    <input type="datetime-local" id="end_time" name="end_time" required>
+                </div>
+                <div class="form-group">
+                    <label for="class">分类</label>
+                    <select id="class" name="class" required>
+                        <option value="0">个人</option>
+                        <option value="1">紧急</option>
+                        <option value="2">正式</option>
+                        <option value="3">非正式</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="remindicon">提醒图标</label>
+                    <input type="text" id="remindicon" name="remindicon" placeholder="默认: bell">
+                </div>
+                <button type="submit">添加日程</button>
+            </form>
         </div>
-    </main>
-    <div class="user-menu" id="user-menu">
-        <div class="menu-header">
-            <img src="{{ avatar_route }}" alt="头像">
-            <span>{{ session['username'] }}</span>
+
+        <!-- 原有通知和用户菜单内容保持不变 -->
+        <div class="notification-content" id="notification-content">
+            <h2>通知</h2>
+            <div class="notification-container" id="notification-list">
+                {% for notification in notifications %}
+                    <div class="notification">
+                        <div class="notification-title">{{ notification[1] }}</div>
+                        <div class="notification-content-word">{{ notification[2] }}</div>
+                        <div class="notification-timestamp">{{ notification[3] }}</div>
+                    </div>
+                {% endfor %}
+            </div>
         </div>
-        <ul class="menu-items">
-            <li><a href="/dashboard"><i class="iconfont home" style="font-size: 25px;margin-right: 5px;"></i>Home</a></li>
-            <li><a href="/settings/profile"><i class="iconfont profile" style="font-size: 24px;margin-right: 5px;"></i>Profile</a></li>
-            <li><a href="/b_dl"><i class="iconfont tv" style="font-size: 24px;margin-right: 5px;"></i>Study resources download</a></li>
-            <li><a href="/logout"><i class="iconfont logout" style="font-size: 24px;margin-right: 5px;"></i>Logout</a></li>
-        </ul>
+        <div class="overlay" id="overlay"></div>
+
+        <div class="user-menu" id="user-menu">
+            <div class="menu-header">
+                <img src="{{ avatar_route }}" alt="头像">
+                <span>{{ session['username'] }}</span>
+            </div>
+            <ul class="menu-items">
+                <li><a href="/dashboard"><i class="iconfont home" style="font-size: 25px;margin-right: 5px;"></i>Home</a></li>
+                <li><a href="/settings/profile"><i class="iconfont profile" style="font-size: 24px;margin-right: 5px;"></i>Profile</a></li>
+                <li><a href="/b_dl"><i class="iconfont tv" style="font-size: 24px;margin-right: 5px;"></i>Study resources download</a></li>
+                <li><a href="/logout"><i class="iconfont logout" style="font-size: 24px;margin-right: 5px;"></i>Logout</a></li>
+            </ul>
+        </div>
     </div>
 
     <script>
-        document.getElementById('avatar-img').addEventListener('click', function(event) {
-            var userMenu = document.getElementById('user-menu');
-            userMenu.classList.toggle('show');
-            event.stopPropagation(); // 阻止事件冒泡，防止触发 body 上的点击事件
-        });
+    document.addEventListener('DOMContentLoaded', function() {
+    // 特效按钮逻辑
+    const effectBtn = document.getElementById('effect-btn');
+    const wrapper = document.querySelector('.content-wrapper');
+    const sidebar = document.getElementById('effect-sidebar');
+    const originalForm = document.getElementById('original-form');
 
-        // 点击 body 上的其他区域隐藏菜单
-        document.body.addEventListener('click', function(event) {
-            var userMenu = document.getElementById('user-menu');
-            // 检查点击的是否是头像或菜单，若不是则关闭菜单
-            if (!userMenu.contains(event.target) && !document.getElementById('avatar-img').contains(event.target)) {
-                userMenu.classList.remove('show');
-            }
+    effectBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        
+        wrapper.classList.toggle('effect-active');
+        sidebar.classList.toggle('active');
+
+        if (sidebar.classList.contains('active')) {
+            const clonedForm = originalForm.cloneNode(true);
+            clonedForm.style.display = 'block';
+            sidebar.appendChild(clonedForm);
+            originalForm.style.display = 'none';
+        } else {
+            sidebar.innerHTML = '';
+            originalForm.style.display = 'block';
+        }
+    
+        // 绑定表单提交事件
+    document.getElementById('add-schedule-form-submit').addEventListener('submit', function(event) {
+            console.log('Form submitted'); // 确保事件被触发
+            event.preventDefault(); // 阻止表单默认提交行为
+
+            // 获取表单数据
+            const formData = new FormData(event.target);
+            const data = {
+                title: formData.get('title'),
+                content: formData.get('content'),
+                start_time: formData.get('start_time'),
+                end_time: formData.get('end_time'),
+                class: formData.get('class'),
+                remindicon: formData.get('remindicon') || 'bell',
+            };
+            console.log(data); // 确保数据正确
+
+            // 发送 POST 请求到后端
+            fetch('/modify_schedule', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams(data).toString()
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showPopup('日程添加成功！');
+                    loadSchedule(); // 刷新日程列表
+                } else {
+                    showPopup('日程添加失败：' + result.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('日程添加失败，请稍后重试。');
+            });
         });
+    });
+
+    // 点击外部区域恢复
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#effect-btn') && 
+            !e.target.closest('.effect-sidebar') &&
+            wrapper.classList.contains('effect-active')) {
+            
+            wrapper.classList.remove('effect-active');
+            sidebar.classList.remove('active');
+            sidebar.innerHTML = '';
+            originalForm.style.display = 'none';
+        }
+    });
+
+    // 阻止特效激活时打开通知
+    const notificationIcon = document.getElementById('notification-icon');
+    notificationIcon.addEventListener('click', function(e) {
+        if (wrapper.classList.contains('effect-active')) {
+            e.stopImmediatePropagation();
+            return false;
+        }
+    });
+
+
+    // 处理通知图标的点击事件
+    document.getElementById('notification-icon').addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation(); // 阻止事件冒泡
+        var notificationContent = document.getElementById('notification-content');
+        var overlay = document.getElementById('overlay');
+        notificationContent.classList.toggle('show');
+        overlay.classList.toggle('show');
+    });
+
+    // 点击遮罩层隐藏通知内容
+    document.getElementById('overlay').addEventListener('click', function() {
+        var notificationContent = document.getElementById('notification-content');
+        var overlay = document.getElementById('overlay');
+        notificationContent.classList.remove('show');
+        overlay.classList.remove('show');
+    });
+
+    // 加载日程
+    function loadSchedule() {
+        fetch('/get_schedule')
+            .then(response => response.json())
+            .then(data => {
+                const scheduleContainer = document.getElementById('schedule-content');
+                scheduleContainer.innerHTML = ''; // 清空现有内容
+
+                if (data.schedule.length === 0) {
+                    scheduleContainer.innerHTML = '<div class="empty-message">empty</div>';
+                } else {
+                    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                    days.forEach(day => {
+                        const dayElement = document.createElement('div');
+                        dayElement.className = 'day';
+                        dayElement.innerHTML = `<h3>${day}</h3>`;
+                        scheduleContainer.appendChild(dayElement);
+
+                        const tasksForDay = data.schedule.filter(task => task[8] === day);
+                        if (tasksForDay.length > 0) {
+                            tasksForDay.forEach(task => {
+                                const taskElement = document.createElement('div');
+                                taskElement.className = 'task';
+
+                                const classLevel = task[6];
+                                let taskClass = '';
+                                if (classLevel === '0') {
+                                    taskClass = 'task-personal';
+                                } else if (classLevel === '1') {
+                                    taskClass = 'task-urgent';
+                                } else if (classLevel === '2') {
+                                    taskClass = 'task-formal';
+                                } else if (classLevel === '3') {
+                                    taskClass = 'task-informal';
+                                }
+
+                                taskElement.classList.add(taskClass);
+                                taskElement.innerHTML = `
+                                    <h4>${task[2]}</h4>
+                                    <p>${task[4]} - ${task[5]}</p>
+                                    <p>${task[3]}</p>
+                                    <p>分类: ${task[6]}</p>
+                                `;
+                                dayElement.appendChild(taskElement);
+                            });
+                        } else {
+                            const emptyTaskElement = document.createElement('div');
+                            emptyTaskElement.className = 'empty-message';
+                            emptyTaskElement.innerText = '无日程';
+                            dayElement.appendChild(emptyTaskElement);
+                        }
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading schedule:', error);
+                const scheduleContainer = document.getElementById('schedule-content');
+                scheduleContainer.innerHTML = '<div class="empty-message">Failed to load schedule.</div>';
+            });
+    }
+
+    // 处理用户菜单显示/隐藏
+    document.getElementById('avatar-img').addEventListener('click', function(event) {
+        var userMenu = document.getElementById('user-menu');
+        userMenu.classList.toggle('show');
+        event.stopPropagation();
+    });
+
+    // 点击 body 上的其他区域隐藏菜单
+    document.body.addEventListener('click', function(event) {
+        var userMenu = document.getElementById('user-menu');
+        if (!userMenu.contains(event.target) && !document.getElementById('avatar-img').contains(event.target)) {
+            userMenu.classList.remove('show');
+        }
+    });
+
+    // 页面加载时调用
+    window.onload = function() {
+        loadSchedule();
+    };
+});
     </script>
 </body>
 </html>

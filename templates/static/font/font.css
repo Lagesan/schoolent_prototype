@@ -34,6 +34,26 @@
   .tv:before {
     content: "\e63e";
   }
+  .academy:before {
+    content: "\e604";
+  }
+  
+  .msg:before {
+    content: "\e602";
+  }
+  
+  .icon-sousuo:before {
+    content: "\e60a";
+  }
+  
+  .icon-shezhi:before {
+    content: "\e6ed";
+  }
+  
+  .notification:before {
+    content: "\e604";
+  }
+  
   @font-face {
     font-family: 'Pacifico';
     src: url('Pacifico-Regular.ttf') format('truetype');

@@ -6,6 +6,7 @@ from flask_socketio import SocketIO, emit
 from banalysis import download_bilibili_video
 import subprocess, threading, time
 from markdown.extensions.fenced_code import FencedCodeExtension
+from datetime import datetime
 import markdown, uuid
 
 app = Flask(__name__, static_folder='templates/static')
@@ -68,6 +69,7 @@ def init_folders():
 def init_db():
     with sqlite3.connect('app.db') as conn:
         cursor = conn.cursor()
+        # create users table
         cursor.execute('''CREATE TABLE IF NOT EXISTS users (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             username TEXT NOT NULL UNIQUE,
@@ -78,11 +80,24 @@ def init_db():
                             sex TEXT DEFAULT 'None',
                             classroom TEXT DEFAULT 'None',
                             birthday TEXT DEFAULT 'None')''')
+        # create notifications table
         cursor.execute('''CREATE TABLE IF NOT EXISTS notifications (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             title TEXT NOT NULL,
                             content TEXT NOT NULL,
                             time TEXT NOT NULL)''')
+        #create schedule table
+        # cursor.execute('''DROP TABLE IF EXISTS schedule''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS schedule (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_id INTEGER,
+                            title TEXT NOT NULL,
+                            content TEXT NOT NULL,
+                            start_time TEXT NOT NULL,
+                            end_time TEXT NOT NULL,
+                            class TEXT NOT NULL,
+                            remindicon TEXT DEFAULT "bell")''')
+        # create messages table
         cursor.execute('''CREATE TABLE IF NOT EXISTS messages (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             user_id INTEGER,
@@ -298,14 +313,13 @@ def dashboard():
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM notifications ORDER BY time DESC')
         notifications = cursor.fetchall()
-        
         # 获取用户头像路径
         cursor.execute('SELECT avatar_route FROM users WHERE id = ?', (session['user_id'],))
         result = cursor.fetchone()
         if result:
             avatar_route = result[0]
-        
-    return render_template('dashboard.html', notifications=notifications, avatar_route="avatar/"+avatar_route)
+    # print(notifications)
+    return render_template('dashboard.html', notifications=notifications, avatar_route="/avatar/"+avatar_route)
 
 @app.route('/logout')
 def logout():
@@ -334,6 +348,60 @@ def AiChat():
     html_response = markdown.markdown(spark_response, extensions=[FencedCodeExtension()])
     return html_response
 
+
+@app.route('/modify_schedule', methods=['POST'])
+def modify_schedule():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+    title = request.form.get('title')
+    content = request.form.get('content')
+    start_time = request.form.get('start_time')
+    end_time = request.form.get('end_time')
+    class_level = request.form.get('class')
+    remindicon = request.form.get('remindicon', 'bell')
+
+    try:
+        with sqlite3.connect('app.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO schedule (user_id, title, content, start_time, end_time, class, remindicon)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (session['user_id'], title, content, start_time, end_time, class_level, remindicon))
+            conn.commit()
+        return jsonify({'success': True, 'message': 'Schedule added successfully'}), 200
+    except sqlite3.Error as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/get_schedule', methods=['GET'])
+def get_schedule():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    with sqlite3.connect('app.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM schedule WHERE user_id = ?', (session['user_id'],))
+        schedule = cursor.fetchall()
+        print(schedule)
+        if not schedule:
+            return jsonify({'error': 'No schedule found'}), 404
+
+        updated_schedule = []
+        for task in schedule:
+            # 获取第 5 个元素（索引为 4），并解析为 datetime 对象
+            date_str = task[4]
+            date_obj = datetime.strptime(date_str, '%Y-%m-%dT%H:%M')
+
+            # 获取星期几（strftime("%A") 返回星期几的英文全称）
+            day_of_week = date_obj.strftime("%A")
+
+            # 将星期几添加到元组中
+            updated_task = task + (day_of_week,)
+            updated_schedule.append(updated_task)
+
+        # 打印结果
+        print(updated_schedule)
+
+    return jsonify({'schedule': updated_schedule}), 200
 
 @app.route('/random_bv', methods=['GET'])
 def random_bv():

@@ -181,6 +181,7 @@ input {
     width: 50px;
     height: 50px;
     border-radius: 50%;
+    border: 1px solid #dddd;
     margin-right: 15px;
 }
 
@@ -223,18 +224,18 @@ input {
     height: 40px;
     border-radius: 50%;
     margin-right: 10px;
-    border: 1px solid #007bff;
+    border: 1px solid #dddd;
 }
 .user-info span {
     font-weight: bold;
     color: #333;
 }
 
-/* notfication style */
+/* 通知内容样式 */
 .notification-container {
     display: flex;
     flex-direction: column;
-    gap: 20px; 
+    gap: 20px;
     margin-top: 20px;
 }
 
@@ -248,12 +249,12 @@ input {
 
 .notification-title {
     font-weight: bold;
-    font-size: xx-large;
+    font-size: 1.2em;
     color: #333;
     margin-bottom: 5px;
 }
 
-.notification-content {
+.notification-content-word {
     color: #555;
     margin-bottom: 10px;
 }
