@@ -61,6 +61,12 @@
             word-wrap: break-word;
             word-break: break-all;
         }
+        #mwssages li a {
+            color: #333;
+        }
+        #messages li.self a {
+            color: white;
+        }
 
         #messages li.self {
             background: #007bff;
@@ -142,7 +148,7 @@
         <ul id="messages">
             {% for message in messages %}
                 <li class="{% if message[1] == session['user_id'] %}self{% endif %}">
-                    <p>{{ message[-2] }} - {{ message[2] }}</p>
+                    <a href="/user/{{ message[1] }}"><p style="text-decoration: none;margin-top: 0;">{{ message[-2] }}</p></a><span> - {{ message[2] }}</span>
                     {% if message[6] %}
                     <div class="media-container">
                         {% if message[6].endswith('.jpg') or message[6].endswith('.png') or message[6].endswith('.gif') or message[6].endswith('.jpeg') %}

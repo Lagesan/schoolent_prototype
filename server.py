@@ -381,7 +381,6 @@ def get_schedule():
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM schedule WHERE user_id = ?', (session['user_id'],))
         schedule = cursor.fetchall()
-        print(schedule)
         if not schedule:
             return jsonify({'error': 'No schedule found'}), 404
 
@@ -397,11 +396,51 @@ def get_schedule():
             # 将星期几添加到元组中
             updated_task = task + (day_of_week,)
             updated_schedule.append(updated_task)
-
-        # 打印结果
-        print(updated_schedule)
-
     return jsonify({'schedule': updated_schedule}), 200
+
+
+
+@app.route('/delete_schedule/<int:task_id>', methods=['DELETE'])
+def delete_schedule(task_id):
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+    
+    try:
+        with sqlite3.connect('app.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM schedule WHERE id = ? AND user_id = ?', 
+                         (task_id, session['user_id']))
+            conn.commit()
+            return jsonify({'success': True, 'message': 'Schedule deleted'})
+    except sqlite3.Error as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/update_schedule', methods=['PUT'])
+def update_schedule():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+
+    task_id = request.form.get('id')
+    title = request.form.get('title')
+    content = request.form.get('content')
+    start_time = request.form.get('start_time')
+    end_time = request.form.get('end_time')
+    class_level = request.form.get('class')
+    remindicon = request.form.get('remindicon', 'bell')
+
+    try:
+        with sqlite3.connect('app.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('''UPDATE schedule SET
+                title = ?, content = ?, start_time = ?, end_time = ?,
+                class = ?, remindicon = ? WHERE id = ? AND user_id = ?''',
+                (title, content, start_time, end_time, class_level, remindicon, 
+                 task_id, session['user_id']))
+            conn.commit()
+            return jsonify({'success': True})
+    except sqlite3.Error as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 
 @app.route('/random_bv', methods=['GET'])
 def random_bv():
