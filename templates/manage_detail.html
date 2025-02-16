@@ -1,0 +1,133 @@
+{% extends "layout.html" %}
+
+{% block title %}问卷管理 - {{ survey.title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>{{ survey.title }} 数据统计</h1>
+    
+    <!-- 数据概览 -->
+    <div class="stats-overview">
+        <div class="stat-card">
+            <h3>总参与人数</h3>
+            <p>{{ total_responses }}</p>
+        </div>
+    </div>
+
+    <!-- 详细统计 -->
+    {% for q_id, stat in stats.items() %}
+    <div class="question-stats">
+        <h3>{{ stat.question }}</h3>
+        
+        {% if stat.type == 'radio' %}
+        <!-- 单选题图表 -->
+        <div class="chart-container">
+            <canvas id="chart-{{ q_id }}"></canvas>
+        </div>
+        
+        {% elif stat.type == 'checkbox' %}
+        <!-- 多选题图表 -->
+        <div class="chart-container">
+            <canvas id="chart-{{ q_id }}"></canvas>
+        </div>
+        {% endif %}
+        
+        <!-- 原始数据表格 -->
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>选项</th>
+                    <th>选择次数</th>
+                    <th>占比</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for option in stat.options %}
+                <tr>
+                    <td>{{ option }}</td>
+                    <td>{{ stat.data.get(option, 0) }}</td>
+                    <td>
+                        {% if total_responses > 0 %}
+                            {{ (stat.data.get(option, 0) / total_responses * 100) | round(1) }}%
+                        {% else %}
+                            0%
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+
+    <!-- 原始回答数据 -->
+    <div class="raw-responses">
+        <h2>原始回答数据</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>用户</th>
+                    <th>提交时间</th>
+                    {% for q in questions %}
+                    <th>{{ q.content }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for key, group in response_groups.items() %}
+                <tr>
+                    <td>{{ group.user }}</td>
+                    <td>{{ group.time }}</td>
+                    {% for q in questions %}
+                    <td>
+                        {% set answer = group.answers.get(q.id, '') %}
+                            {{ answer }}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- 引入 Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    {% for q_id, stat in stats.items() %}
+    // 生成图表
+    const ctx{{ q_id }} = document.getElementById('chart-{{ q_id }}').getContext('2d');
+    new Chart(ctx{{ q_id }}, {
+        type: '{{ "pie" if stat.type == "radio" else "bar" }}',
+        data: {
+            labels: {{ stat.options|tojson }},
+            datasets: [{
+                label: '选择次数',
+                data: {{ stat.chart_data|tojson }},
+                backgroundColor: [
+                    '#2196F3', '#4CAF50', '#FF9800', 
+                    '#E91E63', '#9C27B0', '#00BCD4'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: true,
+                    text: '{{ stat.question }}'
+                }
+            }
+        }
+    });
+    {% endfor %}
+});
+</script>
+{% endblock %}

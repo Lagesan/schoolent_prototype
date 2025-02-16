@@ -1,0 +1,274 @@
+{% extends "layout.html" %}
+
+{% block title %}创建问卷{% endblock %}
+
+{% block content %}
+<h1>创建新问卷</h1>
+<form id="surveyForm" method="POST" action="/create" enctype="multipart/form-data">
+    <div class="form-group">
+        <label>问卷标题</label>
+        <input type="text" name="survey_title" required class="full-width">
+    </div>
+
+    <div id="questionsContainer">
+        <!-- 问题将在这里动态添加 -->
+    </div>
+
+    <div class="toolbar">
+        <button type="button" class="btn" data-action="addQuestion" data-question-type="text">
+            <span class="icon">📝</span>添加文本
+        </button>
+        <button type="button" class="btn" data-action="addQuestion" data-question-type="radio">
+            <span class="icon">🔘</span>添加单选
+        </button>
+        <button type="button" class="btn" data-action="addQuestion" data-question-type="checkbox">
+            <span class="icon">☑️</span>添加多选
+        </button>
+        <button type="button" class="btn" data-action="addQuestion" data-question-type="input">
+            <span class="icon">📩</span>添加简答
+        </button>
+    </div>
+
+    <div class="form-footer">
+        <button type="submit" class="btn primary large">
+            <span class="icon">🚀</span>发布问卷
+        </button>
+    </div>
+</form>
+
+<script id="questionTemplate" type="text/template">
+<div class="question-item" data-type="[[ type ]]" data-index="[[ index ]]">
+    <div class="question-header">
+        <h3>[[ title ]]</h3>
+        <button type="button" class="btn danger small" data-action="removeQuestion">
+            🗑️删除
+        </button>
+    </div>
+    <div class="question-body">
+        [[ content ]]
+    </div>
+</div>
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let questionIndex = 0;
+
+    const questionConfig = {
+        text: {
+            title: '文本区块',
+            content: (index) => `
+                <div class="form-group">
+                    <textarea name="q_text_${index}_question" 
+                              required 
+                              placeholder="请输入说明文字"
+                              class="text-input"></textarea>
+                </div>
+            `
+        },
+        radio: {
+            title: '单选题',
+            content: (index) => `
+                <div class="form-group">
+                    <input type="text" 
+                        name="q_radio_${index}_question" 
+                        required 
+                        placeholder="请输入问题内容">
+                </div>
+                <div class="options-container" data-index="${index}">
+                    <div class="option">
+                        <input type="radio" name="q_radio_${index}_option" disabled>
+                        <input type="text" 
+                            name="q_radio_${index}_option_0" 
+                            required 
+                            placeholder="选项内容">
+                        <div class="option-actions">
+                            <button type="button" class="btn icon" 
+                                    data-action="addOption" 
+                                    data-question-type="radio">➕</button>
+                        </div>
+                    </div>
+                </div>
+            `
+        },
+        checkbox: {
+            title: '多选题',
+            content: (index) => `
+                <div class="form-group">
+                    <input type="text" 
+                        name="q_checkbox_${index}_question" 
+                        required 
+                        placeholder="请输入问题内容">
+                </div>
+                <div class="options-container" data-index="${index}">
+                    <div class="option">
+                        <input type="checkbox" name="q_checkbox_${index}_option" disabled>
+                        <input type="text" 
+                            name="q_checkbox_${index}_option_0" 
+                            required 
+                            placeholder="选项内容">
+                        <div class="option-actions">
+                            <button type="button" class="btn icon" 
+                                    data-action="addOption" 
+                                    data-question-type="checkbox">➕</button>
+                        </div>
+                    </div>
+                </div>
+            `
+        },
+        input: {
+            title: '简答题',
+            content: (index) => `
+                <div class="form-group">
+                    <input type="text" 
+                           name="q_input_${index}_question" 
+                           required 
+                           placeholder="请输入问题内容"
+                           class="question-input">
+                </div>
+                <div class="form-group">
+                    <textarea name="q_input_${index}_answer" 
+                              disabled 
+                              placeholder="用户将在此输入文本"
+                              class="answer-input"></textarea>
+                </div>
+            `
+        }
+    };
+
+    document.addEventListener('click', function(e) {
+        const target = e.target.closest('[data-action]');
+        if (!target) return;
+
+        const action = target.dataset.action;
+        const questionType = target.dataset.questionType;
+
+        switch(action) {
+            case 'addQuestion':
+                addQuestion(questionType);
+                break;
+            case 'removeQuestion':
+                removeQuestion(target.closest('.question-item'));
+                break;
+            case 'addOption':
+                addOption(target, questionType);
+                break;
+            case 'removeOption':
+                removeOption(target.closest('.option'));
+                break;
+        }
+    });
+
+    function addQuestion(type) {
+        if (!questionConfig[type]) {
+            console.error(`未知的问题类型: ${type}`);
+            return;
+        }
+
+        const template = document.getElementById('questionTemplate').innerHTML;
+        const config = questionConfig[type];
+        const index = questionIndex++;
+        
+        const content = config.content(index)
+            .replace(/\n/g, '')
+            .replace(/ {2,}/g, '');
+
+        const questionHTML = template
+            .replace(/\[\[ title \]\]/g, config.title)
+            .replace(/\[\[ content \]\]/g, content)
+            .replace(/\[\[ index \]\]/g, index)
+            .replace(/\[\[ type \]\]/g, type);
+
+        const div = document.createElement('div');
+        div.innerHTML = questionHTML;
+        
+        if (!div.firstElementChild) {
+            console.error('生成的 HTML 无效:', questionHTML);
+            return;
+        }
+
+        const questionsContainer = document.getElementById('questionsContainer');
+        if (!questionsContainer) {
+            console.error('questionsContainer 未找到');
+            return;
+        }
+
+        questionsContainer.appendChild(div.firstElementChild);
+        
+        div.firstElementChild.style.opacity = 0;
+        setTimeout(() => {
+            div.firstElementChild.style.opacity = 1;
+            div.firstElementChild.style.transform = 'translateY(0)';
+        }, 10);
+    }
+
+    function addOption(button, type) {
+            const container = button.closest('.options-container');
+            const index = container.dataset.index;
+            const optionCount = container.querySelectorAll('.option').length;
+            
+            const optionHTML = `
+                <div class="option">
+                    <input type="${type === 'radio' ? 'radio' : 'checkbox'}" 
+                        name="q_${type}_${index}_option" 
+                        disabled>
+                    <input type="text" 
+                        name="q_${type}_${index}_option_${optionCount}" 
+                        required 
+                        placeholder="选项内容">
+                    <div class="option-actions">
+                        <button type="button" class="btn icon danger" 
+                                data-action="removeOption">➖</button>
+                    </div>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', optionHTML);
+        }
+
+    function removeQuestion(questionItem) {
+        if (!questionItem) return;
+        
+        questionItem.style.transform = 'translateX(-100%)';
+        questionItem.style.opacity = '0';
+        setTimeout(() => questionItem.remove(), 300);
+    }
+
+    function removeOption(option) {
+        if (!option) return;
+        
+        option.style.opacity = 0;
+        setTimeout(() => option.remove(), 300);
+    }
+
+    document.getElementById('surveyForm').addEventListener('submit', function(e) {
+        let isValid = true;
+        const errorFields = [];
+
+        const titleInput = this.querySelector('[name="survey_title"]');
+        if (!titleInput.value.trim()) {
+            errorFields.push(titleInput);
+        }
+
+        this.querySelectorAll('.question-item [required]').forEach(input => {
+            if (!input.value.trim()) {
+                errorFields.push(input);
+            }
+        });
+
+        errorFields.forEach(field => field.classList.add('error'));
+        
+        if (errorFields.length > 0) {
+            e.preventDefault();
+            errorFields[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            alert('请完善所有标红字段内容');
+        }
+    });
+
+    document.addEventListener('input', function(e) {
+        if (e.target.matches('[required]')) {
+            e.target.classList.toggle('error', !e.target.value.trim());
+        }
+    });
+});
+</script>
+{% endblock %}

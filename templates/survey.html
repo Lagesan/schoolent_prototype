@@ -1,0 +1,132 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container">
+    <h1 class="survey-title">{{ survey.title }}</h1>
+    
+    <form method="POST" class="survey-form">
+        {% for question in questions %}
+        <div class="question-card">
+            {% if question.type == 'radio' %}
+                <!-- 单选题 -->
+                <div class="question-item">
+                    <h3>{{ question.content }}</h3>
+                    <div class="options">
+                        {% if question.options %}
+                            {% for option in question.options|from_json %}
+                                <label class="option-item">
+                                    <input type="radio" 
+                                           name="q_{{ question.id }}" 
+                                           value="{{ option }}"
+                                           required>
+                                    <span class="option-text">{{ option }}</span>
+                                </label>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                </div>
+
+            {% elif question.type == 'checkbox' %}
+                <!-- 多选题 -->
+                <div class="question-item">
+                    <h3>{{ question.content }}</h3>
+                    <div class="options">
+                        {% if question.options %}
+                            {% for option in question.options|from_json %}
+                                <label class="option-item">
+                                    <input type="checkbox"
+                                           name="q_{{ question.id }}[]" 
+                                           value="{{ option }}">
+                                    <span class="option-text">{{ option }}</span>
+                                </label>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                </div>
+
+            {% elif question.type == 'input' %}
+                <!-- 简答题 -->
+                <div class="question-item">
+                    <h3>{{ question.content }}</h3>
+                    <div class="form-group">
+                        <textarea name="q_{{ question.id }}" 
+                                  required 
+                                  placeholder="请输入您的回答"></textarea>
+                    </div>
+                </div>
+
+            {% elif question.type == 'text' %}
+                <!-- 文本说明 -->
+                <div class="question-item">
+                    <h3>{{ question.content }}</h3>
+                    <div class="form-group">
+                        <p>{{ question.content }}</p>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        
+        <button type="submit" class="submit-btn">提交问卷</button>
+    </form>
+</div>
+
+<style>
+    /* 美化单选/多选样式 */
+    .options {
+        display: flex;
+        flex-direction: column;
+        gap: 12px; /* 选项间距 */
+    }
+
+    .option-item {
+        display: flex;
+        align-items: center;
+        padding: 8px;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        background: #fff;
+    }
+
+    .option-item:hover {
+        background: #f8f9fa;
+    }
+
+    input[type="radio"], input[type="checkbox"] {
+        margin-right: 8px;
+    }
+
+    /* 美化输入框样式 */
+    textarea, input[type="text"] {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #dfe1e5;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: all 0.3s;
+        box-sizing: border-box;
+    }
+
+    textarea:focus, input[type="text"]:focus {
+        border-color: #1a73e8;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.1);
+        outline: none;
+    }
+
+    /* 提交按钮样式 */
+    .submit-btn {
+        margin-top: 20px;
+        padding: 12px 24px;
+        background-color: #1a73e8;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        cursor: pointer;
+    }
+
+    .submit-btn:hover {
+        background-color: #1557b0;
+    }
+</style>
+{% endblock %}

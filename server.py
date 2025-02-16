@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, jsonify, Response
-import sqlite3
+import sqlite3, json
 import os, time, requests,urllib.parse
 import shutil
 from flask_socketio import SocketIO, emit
@@ -8,9 +8,10 @@ import subprocess, threading, time
 from markdown.extensions.fenced_code import FencedCodeExtension
 from datetime import datetime
 import markdown, uuid
+from datetime import datetime
 
 app = Flask(__name__, static_folder='templates/static')
-app.secret_key = 'g102'
+app.secret_key = os.urandom(24)
 
 
 # 配置数据库连接
@@ -65,6 +66,12 @@ def init_folders():
     if os.path.exists(default_avatar_path):
         shutil.copy(default_avatar_path, avatar_folder)
 
+# QS part 
+def from_json(value):
+    """将 JSON 字符串解析为 Python 对象"""
+    return json.loads(value)
+app.jinja_env.filters['from_json'] = from_json
+
 # 初始化数据库
 def init_db():
     with sqlite3.connect('app.db') as conn:
@@ -98,6 +105,7 @@ def init_db():
                             class TEXT NOT NULL,
                             remindicon TEXT DEFAULT "bell")''')
         # create messages table
+        # cursor.execute('''DROP TABLE IF EXISTS messages''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS messages (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             user_id INTEGER,
@@ -105,12 +113,43 @@ def init_db():
                             time TEXT NOT NULL,
                             file_id INTEGER NULL,
                             username TEXT NOT NULL)''')
+        # cursor.execute('''DROP TABLE IF EXISTS files''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS files (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             message_id INTEGER,
                             filename TEXT NOT NULL,
                             filepath TEXT NOT NULL,
                             FOREIGN KEY (message_id) REFERENCES messages (id))''')
+        # create surveys table
+        # 问卷表
+        cursor.execute('''CREATE TABLE IF NOT EXISTS surveys
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    creator_id INTEGER NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    FOREIGN KEY(creator_id) REFERENCES users(id))''')
+        
+        # 问题表
+        cursor.execute('''CREATE TABLE IF NOT EXISTS questions
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    survey_id INTEGER NOT NULL,
+                    type TEXT NOT NULL,  -- title/text/radio/checkbox/input
+                    content TEXT NOT NULL,
+                    options TEXT,  -- JSON格式存储选项
+                    required BOOLEAN NOT NULL DEFAULT 1,
+                    FOREIGN KEY(survey_id) REFERENCES surveys(id))''')
+        
+        # 回答表
+        cursor.execute('''CREATE TABLE IF NOT EXISTS responses
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    survey_id INTEGER NOT NULL,
+                    question_id INTEGER NOT NULL,
+                    user_id INTEGER,
+                    answer TEXT NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    FOREIGN KEY(survey_id) REFERENCES surveys(id),
+                    FOREIGN KEY(question_id) REFERENCES questions(id),
+                    FOREIGN KEY(user_id) REFERENCES users(id))''')
         conn.commit()
 
 
@@ -188,6 +227,11 @@ def get_random_bv():
         print(response.text)
     return []
 
+# QS数据库辅助函数
+def get_qsdb():
+    conn = sqlite3.connect('app.db')
+    conn.row_factory = sqlite3.Row  # 可选：设置行工厂
+    return conn
 
 
 
@@ -353,12 +397,21 @@ def AiChat():
 def modify_schedule():
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Unauthorized'}), 401
-    title = request.form.get('title')
-    content = request.form.get('content')
-    start_time = request.form.get('start_time')
-    end_time = request.form.get('end_time')
-    class_level = request.form.get('class')
-    remindicon = request.form.get('remindicon', 'bell')
+    data = request.get_json()
+    title = data.get('title')
+    content = data.get('content')
+    start_time = data.get('start_time')
+    end_time = data.get('end_time')
+    class_level = data.get('class')
+    remindicon = data.get('remindicon', 'bell')
+    print(data)
+
+    # 转换时间格式
+    try:
+        start_time = datetime.fromisoformat(start_time.replace('Z', ''))
+        end_time = datetime.fromisoformat(end_time.replace('Z', ''))
+    except ValueError as e:
+        return jsonify({'success': False, 'message': f'Invalid time format: {str(e)}'}), 400
 
     try:
         with sqlite3.connect('app.db') as conn:
@@ -366,9 +419,63 @@ def modify_schedule():
             cursor.execute('''
                 INSERT INTO schedule (user_id, title, content, start_time, end_time, class, remindicon)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (session['user_id'], title, content, start_time, end_time, class_level, remindicon))
+            ''', (session['user_id'], title, content, start_time.strftime('%Y-%m-%d %H:%M:%S'), 
+                 end_time.strftime('%Y-%m-%d %H:%M:%S'), class_level, remindicon))
             conn.commit()
-        return jsonify({'success': True, 'message': 'Schedule added successfully'}), 200
+            return jsonify({
+                'success': True,
+                'message': 'Schedule added successfully',
+                'schedule_id': cursor.lastrowid  # 返回新创建的日程ID
+            }), 200
+    except sqlite3.Error as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/update_schedule', methods=['PUT'])
+def update_schedule():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+
+    data = request.get_json()
+    task_id = data.get('id')
+    title = data.get('title')
+    content = data.get('content')
+    start_time = data.get('start_time')
+    end_time = data.get('end_time')
+    class_level = data.get('class')
+    remindicon = data.get('remindicon', 'bell')
+
+    try:
+        start_time = datetime.fromisoformat(start_time.replace('Z', ''))
+        end_time = datetime.fromisoformat(end_time.replace('Z', ''))
+    except ValueError as e:
+        return jsonify({'success': False, 'message': f'Invalid time format: {str(e)}'}), 400
+
+    try:
+        with sqlite3.connect('app.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE schedule SET
+                title = ?, content = ?, start_time = ?, end_time = ?,
+                class = ?, remindicon = ?
+                WHERE id = ? AND user_id = ?
+            ''', (
+                title, content, start_time.strftime('%Y-%m-%d %H:%M:%S'), 
+                end_time.strftime('%Y-%m-%d %H:%M:%S'), class_level, remindicon,
+                task_id, session['user_id']
+            ))
+            conn.commit()
+
+            # 返回更新后的日程数据
+            cursor.execute('SELECT * FROM schedule WHERE id = ?', (task_id,))
+            updated_task = cursor.fetchone()
+            if updated_task:
+                return jsonify({
+                    'success': True,
+                    'message': 'Schedule updated successfully',
+                    'task': updated_task
+                }), 200
+            else:
+                return jsonify({'success': False, 'message': 'Task not found'}), 404
     except sqlite3.Error as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
@@ -377,46 +484,84 @@ def get_schedule():
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
 
-    with sqlite3.connect('app.db') as conn:
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM schedule WHERE user_id = ?', (session['user_id'],))
-        schedule = cursor.fetchall()
-        if not schedule:
-            return jsonify({'error': 'No schedule found'}), 404
+    start_time = request.args.get('start')
+    end_time = request.args.get('end')
 
-        updated_schedule = []
-        for task in schedule:
-            # 获取第 5 个元素（索引为 4），并解析为 datetime 对象
-            date_str = task[4]
-            date_obj = datetime.strptime(date_str, '%Y-%m-%dT%H:%M')
+    try:
+        with sqlite3.connect('app.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT * FROM schedule 
+                WHERE user_id = ? AND start_time >= ? AND end_time <= ?
+            ''', (session['user_id'], start_time, end_time))
+            schedule = cursor.fetchall()
 
-            # 获取星期几（strftime("%A") 返回星期几的英文全称）
-            day_of_week = date_obj.strftime("%A")
+            if not schedule:
+                return jsonify({'schedule': []}), 200
 
-            # 将星期几添加到元组中
-            updated_task = task + (day_of_week,)
-            updated_schedule.append(updated_task)
-    return jsonify({'schedule': updated_schedule}), 200
+            # 添加星期几信息
+            updated_schedule = []
+            for task in schedule:
+                date_str = task[4]  # start_time 是第5列
+                date_obj = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+                day_of_week = date_obj.strftime("%A")
+                updated_task = task + (day_of_week,)
+                updated_schedule.append(updated_task)
 
+            return jsonify({'schedule': updated_schedule}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/get_schedule/<int:task_id>', methods=['GET'])
+def get_single_schedule(task_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    try:
+        with sqlite3.connect('app.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT * FROM schedule 
+                WHERE id = ? AND user_id = ?
+            ''', (task_id, session['user_id']))
+            task = cursor.fetchone()
+
+            if not task:
+                return jsonify({'error': 'Schedule not found'}), 404
+
+            return jsonify({
+                'id': task[0],
+                'title': task[2],
+                'content': task[3],
+                'start_time': task[4].replace(' ', 'T'),  # 转换为前端需要的格式
+                'end_time': task[5].replace(' ', 'T'),
+                'class': task[6],
+                'remindicon': task[7]
+            }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/delete_schedule/<int:task_id>', methods=['DELETE'])
 def delete_schedule(task_id):
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Unauthorized'}), 401
-    
+
     try:
         with sqlite3.connect('app.db') as conn:
             cursor = conn.cursor()
             cursor.execute('DELETE FROM schedule WHERE id = ? AND user_id = ?', 
                          (task_id, session['user_id']))
             conn.commit()
-            return jsonify({'success': True, 'message': 'Schedule deleted'})
+            return jsonify({
+                'success': True,
+                'message': 'Schedule deleted successfully'
+            }), 200
     except sqlite3.Error as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/update_schedule', methods=['PUT'])
-def update_schedule():
+def update_schedule_put():
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Unauthorized'}), 401
 
@@ -797,6 +942,310 @@ def uploaded_file(user, filename):
 @app.route('/avatar/<avname>')
 def avatar_file(avname):
     return send_from_directory(os.path.join(app.config['USERS_SETTING'], 'avatar'), avname)
+
+# QS part
+# QS主页面
+@app.route('/qs')
+def index():
+    db = get_qsdb()
+    surveys = db.execute('SELECT * FROM surveys').fetchall()
+    return render_template('qshall.html', surveys=surveys)
+
+# 创建问卷路由
+@app.route('/create', methods=['GET'])
+def create_survey():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    if request.method == 'POST':
+        # 处理问卷创建逻辑
+        pass
+    
+    return render_template('create.html')
+
+# 删除问卷路由
+@app.route('/survey/<int:survey_id>', methods=['DELETE'])
+def delete_survey(survey_id):
+    if 'user_id' not in session:
+        return 'Unauthorized', 401
+    
+    db = get_qsdb()
+    try:
+        # 验证问卷所有权
+        survey = db.execute('SELECT * FROM surveys WHERE id = ? AND creator_id = ?', 
+                          (survey_id, session['user_id'])).fetchone()
+        if not survey:
+            return '问卷不存在', 404
+        
+        # 删除相关数据
+        db.execute('DELETE FROM responses WHERE survey_id = ?', (survey_id,))
+        db.execute('DELETE FROM questions WHERE survey_id = ?', (survey_id,))
+        db.execute('DELETE FROM surveys WHERE id = ?', (survey_id,))
+        db.commit()
+        return '', 204
+    except Exception as e:
+        db.rollback()
+        return str(e), 500
+
+@app.route('/survey/<int:survey_id>', methods=['GET', 'POST'])
+def take_survey(survey_id):
+    db = get_qsdb()
+    
+    if request.method == 'POST':
+        user_id = session.get('user_id')
+        
+        # 获取所有问题（确保查询包含 options 字段）
+        questions = db.execute('''
+            SELECT id, type, options FROM questions WHERE survey_id = ?
+        ''', (survey_id,)).fetchall()
+        
+        # 处理每个问题的答案
+        for q in questions:
+            q_id = q['id']
+            q_type = q['type']
+            
+            if q_type == 'checkbox':
+                # 处理多选答案
+                answers = request.form.getlist(f'q_{q_id}[]')
+                for answer in answers:
+                    db.execute('''
+                        INSERT INTO responses (survey_id, question_id, user_id, answer, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', (survey_id, q_id, user_id, answer, datetime.now()))
+            else:
+                # 处理单选/文本/图片等答案
+                answer = request.form.get(f'q_{q_id}')
+                if answer:
+                    db.execute('''
+                        INSERT INTO responses (survey_id, question_id, user_id, answer, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', (survey_id, q_id, user_id, answer, datetime.now()))
+        
+        db.commit()
+        return redirect(url_for('index'))
+    
+    # GET 请求：渲染问卷页面
+    survey = db.execute('SELECT * FROM surveys WHERE id = ?', (survey_id,)).fetchone()
+    # 修改后（确保包含options）
+    questions = db.execute('''
+        SELECT id, type, content, options
+        FROM questions 
+        WHERE survey_id = ? 
+        ORDER BY id ASC
+    ''', (survey_id,)).fetchall()
+    
+    return render_template('survey.html', survey=survey, questions=questions)
+
+@app.route('/create', methods=['POST'])
+def handle_create():
+    print("进入handle_create路由")
+    if 'user_id' not in session:
+        flash('请先登录', 'error')
+        return redirect(url_for('login'))
+
+    try:
+        db = get_qsdb()
+        cursor = db.cursor()
+
+        # 1. 插入问卷
+        survey_title = request.form.get('survey_title', '').strip()
+        if not survey_title:
+            flash('问卷标题不能为空', 'error')
+            return redirect(url_for('create_survey'))
+
+        cursor.execute('''
+            INSERT INTO surveys (title, creator_id, created_at)
+            VALUES (?, ?, ?)
+        ''', (survey_title, session['user_id'], datetime.now()))
+        survey_id = cursor.lastrowid
+
+        # 2. 处理问题
+        questions_dict = {}
+
+        # 处理表单字段
+        for key in request.form:
+            if not key.startswith('q_'):
+                continue
+            parts = key.split('_')
+            if len(parts) < 4:  # 字段名格式：q_type_index_subtype...
+                continue
+            q_type = parts[1]
+            q_index = parts[2]
+            field_subtype = parts[3]
+
+            # 确保 q_index 是数字
+            try:
+                q_index = int(q_index)
+            except ValueError:
+                print(f"无效的问题索引: {q_index}")
+                continue
+
+            question_id = f"{q_type}_{q_index}"
+
+            if question_id not in questions_dict:
+                questions_dict[question_id] = {
+                    'type': q_type,
+                    'content': None,
+                    'options': []
+                }
+
+            # 处理题干
+            if field_subtype == 'question':
+                content = request.form[key].strip()
+                questions_dict[question_id]['content'] = content
+            # 处理选项
+            elif field_subtype == 'option':
+                option_value = request.form[key].strip()
+                if option_value:
+                    questions_dict[question_id]['options'].append(option_value)
+
+        # 3. 插入问题到数据库
+        for question_id in questions_dict:
+            question = questions_dict[question_id]
+            q_type = question['type']
+            content = question['content']
+            options = question['options']
+
+            if q_type in ['radio', 'checkbox']:
+                if not content:
+                    continue  # 题干为空则跳过
+                # 对选项按字段索引排序
+                try:
+                    sorted_options = sorted(options, key=lambda x: int(x.split('_')[-1]))
+                except (ValueError, IndexError):
+                    sorted_options = options  # 如果无法排序，直接使用原始选项
+                cursor.execute('''
+                    INSERT INTO questions (survey_id, type, content, options)
+                    VALUES (?, ?, ?, ?)
+                ''', (survey_id, q_type, content, json.dumps(sorted_options)))
+            elif q_type in ['text', 'input']:
+                if not content:
+                    continue
+                cursor.execute('''
+                    INSERT INTO questions (survey_id, type, content)
+                    VALUES (?, ?, ?)
+                ''', (survey_id, q_type, content))
+
+        db.commit()
+        flash('问卷创建成功', 'success')
+        return redirect(url_for('manage'))
+
+    except Exception as e:
+        db.rollback()
+        print(f"创建问卷失败: {str(e)}")
+        flash('问卷创建失败，请稍后重试', 'error')
+        return redirect(url_for('create_survey'))
+
+
+@app.route('/manage/<int:survey_id>')
+def manage_detail(survey_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    db = get_qsdb()
+    
+    # 验证问卷归属
+    survey = db.execute('''
+        SELECT * FROM surveys 
+        WHERE id = ? AND creator_id = ?
+    ''', (survey_id, session['user_id'])).fetchone()
+    
+    if not survey:
+        return "问卷不存在或无权访问", 404
+    
+    # 获取总参与人数
+    total_responses = db.execute('''
+        SELECT COUNT(DISTINCT user_id) as total 
+        FROM responses 
+        WHERE survey_id = ?
+    ''', (survey_id,)).fetchone()['total']
+    
+    # 获取所有问题
+    questions = db.execute('''
+        SELECT * FROM questions 
+        WHERE survey_id = ?
+    ''', (survey_id,)).fetchall()
+
+    # 获取统计信息
+    stats = {}
+    for q in questions:
+        if q['type'] in ['radio', 'checkbox']:
+            res = db.execute('''
+                SELECT answer, COUNT(*) as count 
+                FROM responses 
+                WHERE question_id = ?
+                GROUP BY answer
+            ''', (q['id'],)).fetchall()
+            
+            # 处理多选题的合并统计
+            if q['type'] == 'checkbox':
+                merged_data = {}
+                for row in res:
+                    # 分割多个选项（例如："A,B" -> ["A","B"]）
+                    # print(row['answer'])
+                    for opt in row['answer'].split("\n"):
+                        merged_data[opt.strip()] = merged_data.get(opt.strip(), 0) + row['count']
+                res = [{'answer': k, 'count': v} for k, v in merged_data.items()]
+            
+            # 生成选项数据
+            options = json.loads(q['options'])
+            data = [next((row['count'] for row in res if row['answer'] == opt), 0) for opt in options]
+            
+            stats[q['id']] = {
+                'question': q['content'],
+                'type': q['type'],
+                'options': options,
+                'data': {row['answer']: row['count'] for row in res},
+                'chart_data': data  # 新增字段
+            }
+    
+    # 获取原始回答数据
+    raw_responses = db.execute('''
+        SELECT r.*, u.username 
+        FROM responses r
+        LEFT JOIN users u ON r.user_id = u.id
+        WHERE r.survey_id = ?
+        ORDER BY r.created_at DESC
+    ''', (survey_id,)).fetchall()
+
+    # 按用户分组
+    response_groups = {}
+    for resp in raw_responses:
+        key = resp['user_id'] or resp['created_at']  # 匿名用户用时间戳标识
+        if key not in response_groups:
+            response_groups[key] = {
+                'user': resp['username'] or '匿名用户',
+                'time': resp['created_at'],
+                'answers': {}
+            }
+        if resp['question_id'] not in response_groups[key]['answers']:
+            response_groups[key]['answers'][resp['question_id']] = resp['answer']
+        else:
+            response_groups[key]['answers'][resp['question_id']] += f", {resp['answer']}"
+
+    return render_template('manage_detail.html', 
+                        survey=survey, 
+                        total_responses=total_responses,
+                        stats=stats,
+                        response_groups=response_groups,
+                        questions=questions)
+
+# 管理后台
+@app.route('/manage')
+def manage():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    db = get_qsdb()
+    surveys = db.execute('''
+        SELECT s.id, s.title, COUNT(r.id) as responses 
+        FROM surveys s
+        LEFT JOIN responses r ON s.id = r.survey_id
+        WHERE s.creator_id = ?
+        GROUP BY s.id
+    ''', (session['user_id'],)).fetchall()
+    
+    return render_template('manage.html', surveys=surveys)
 
 if __name__ == '__main__':
     init_folders()

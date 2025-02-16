@@ -1,0 +1,19 @@
+{% extends "layout.html" %}
+{% block title %}问卷大厅{% endblock %}
+
+{% block content %}
+<h1>进行中的问卷调查</h1>
+<div class="survey-list">
+    {% for survey in surveys %}
+    <div class="survey-card">
+        <h3>{{ survey.title }}</h3>
+        <div class="meta">
+            <span>创建时间：{{ survey.created_at }}</span>
+            <a href="/survey/{{ survey.id }}" class="btn">参与调查</a>
+        </div>
+    </div>
+    {% else %}
+    <div class="empty">暂无进行中的问卷</div>
+    {% endfor %}
+</div>
+{% endblock %}

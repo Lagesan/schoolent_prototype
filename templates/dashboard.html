@@ -8,7 +8,6 @@
     <script src="{{ url_for('static', filename='js/popup.js') }}" defer></script>
     <title>Dashboard</title>
     <style>
-        /* 原有样式保持不变 */
         main {
             padding: 20px;
         }
@@ -161,10 +160,8 @@
             pointer-events: none;
         }
         .add-schedule-form {
-            /* hide */
             display: none;
         }
-        /* 新增特效侧边栏样式 */
         .effect-sidebar {
             position: fixed;
             top: 0;
@@ -182,15 +179,75 @@
             right: 0;
         }
         .effect-sidebar .add-schedule-form {
-            /* show */
             display: block;
+        }
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .task-actions {
+            position: relative;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .task-actions:hover {
+            background-color: rgba(0,0,0,0.1);
+        }
+        .task-actions img {
+            width: 18px;
+            height: 18px;
+            filter: opacity(0.7);
+        }
+        .action-menu {
+            position: absolute;
+            right: 0;
+            top: 28px;
+            margin-top: 5px;
+            z-index: 1001;  /* 提高层级 */
+            background: #2c3e50;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            border-radius: 6px;
+            padding: 6px 0;
+            display: none;
+            min-width: 120px;
+            border: 1px solid #34495e;
+        }
+        .action-menu button {
+            background: none;
+            border: none;
+            padding: 8px 16px;
+            width: 100%;
+            text-align: left;
+            cursor: pointer;
+            color: #ecf0f1;
+            font-size: 14px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .action-menu button:hover {
+            background-color: #34495e;
+            color: #fff;
+        }
+        .action-menu button img {
+            width: 14px;
+            height: 14px;
+            filter: brightness(0) invert(1);
         }
     </style>
 </head>
 <body>
-    <!-- 新增特效侧边栏 -->
     <div class="effect-sidebar" id="effect-sidebar"></div>
-
     <div class="content-wrapper">
         <header>
             <a href="/dashboard" style="text-decoration: none; color: inherit;">
@@ -214,7 +271,6 @@
             <a href="/bkend">Backend</a>
             {% endif %}
         </nav>
-
         <main>
             <div class="schedule-container">
                 <div class="schedule-header">
@@ -232,8 +288,6 @@
                 </div>
             </div>
         </main>
-
-        <!-- 原始表单容器 -->
         <div class="add-schedule-form" id="original-form">
             <h2>新增日程</h2>
             <form id="add-schedule-form-submit">
@@ -269,8 +323,6 @@
                 <button type="submit">添加日程</button>
             </form>
         </div>
-
-        <!-- 原有通知和用户菜单内容保持不变 -->
         <div class="notification-content" id="notification-content">
             <h2>通知</h2>
             <div class="notification-container" id="notification-list">
@@ -284,7 +336,6 @@
             </div>
         </div>
         <div class="overlay" id="overlay"></div>
-
         <div class="user-menu" id="user-menu">
             <div class="menu-header">
                 <img src="{{ avatar_route }}" alt="头像">
@@ -298,123 +349,51 @@
             </ul>
         </div>
     </div>
-
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
-    // 特效按钮逻辑
-    const effectBtn = document.getElementById('effect-btn');
-    const wrapper = document.querySelector('.content-wrapper');
-    const sidebar = document.getElementById('effect-sidebar');
-    const originalForm = document.getElementById('original-form');
+    document.addEventListener('DOMContentLoaded', function () {
+    let currentWeekStart = new Date(); // 动态计算周起始
 
-    effectBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        
-        wrapper.classList.toggle('effect-active');
-        sidebar.classList.toggle('active');
+    // 更新周显示
+    function updateWeekDisplay() {
+        const weekStart = new Date(currentWeekStart);
+        weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); // 周一为起始
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6); // 设置结束日期为开始日期的7天后
 
-        if (sidebar.classList.contains('active')) {
-            const clonedForm = originalForm.cloneNode(true);
-            clonedForm.style.display = 'block';
-            sidebar.appendChild(clonedForm);
-            originalForm.style.display = 'none';
-        } else {
-            sidebar.innerHTML = '';
-            originalForm.style.display = 'block';
-        }
-    
-        // 绑定表单提交事件
-    document.getElementById('add-schedule-form-submit').addEventListener('submit', function(event) {
-            console.log('Form submitted'); // 确保事件被触发
-            event.preventDefault(); // 阻止表单默认提交行为
+        const options = { year: 'numeric', month: '2-digit', day: '2-digit' };
+        document.querySelector('.schedule-header h2').textContent =
+            `${weekStart.toLocaleDateString('zh-CN', options)} - ${weekEnd.toLocaleDateString('zh-CN', options)}`;
+    }
 
-            // 获取表单数据
-            const formData = new FormData(event.target);
-            const data = {
-                title: formData.get('title'),
-                content: formData.get('content'),
-                start_time: formData.get('start_time'),
-                end_time: formData.get('end_time'),
-                class: formData.get('class'),
-                remindicon: formData.get('remindicon') || 'bell',
-            };
-            console.log(data); // 确保数据正确
+    // 上一周
+    window.prevWeek = function () {
+        currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+        updateWeekDisplay();
+        loadSchedule();
+    };
 
-            // 发送 POST 请求到后端
-            fetch('/modify_schedule', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: new URLSearchParams(data).toString()
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (result.success) {
-                    showPopup('日程添加成功！');
-                    loadSchedule(); // 刷新日程列表
-                } else {
-                    showPopup('日程添加失败：' + result.message);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('日程添加失败，请稍后重试。');
-            });
-        });
-    });
-
-    // 点击外部区域恢复
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('#effect-btn') && 
-            !e.target.closest('.effect-sidebar') &&
-            wrapper.classList.contains('effect-active')) {
-            
-            wrapper.classList.remove('effect-active');
-            sidebar.classList.remove('active');
-            sidebar.innerHTML = '';
-            originalForm.style.display = 'none';
-        }
-    });
-
-    // 阻止特效激活时打开通知
-    const notificationIcon = document.getElementById('notification-icon');
-    notificationIcon.addEventListener('click', function(e) {
-        if (wrapper.classList.contains('effect-active')) {
-            e.stopImmediatePropagation();
-            return false;
-        }
-    });
-
-
-    // 处理通知图标的点击事件
-    document.getElementById('notification-icon').addEventListener('click', function(event) {
-        event.preventDefault();
-        event.stopPropagation(); // 阻止事件冒泡
-        var notificationContent = document.getElementById('notification-content');
-        var overlay = document.getElementById('overlay');
-        notificationContent.classList.toggle('show');
-        overlay.classList.toggle('show');
-    });
-
-    // 点击遮罩层隐藏通知内容
-    document.getElementById('overlay').addEventListener('click', function() {
-        var notificationContent = document.getElementById('notification-content');
-        var overlay = document.getElementById('overlay');
-        notificationContent.classList.remove('show');
-        overlay.classList.remove('show');
-    });
+    // 下一周
+    window.nextWeek = function () {
+        currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+        updateWeekDisplay();
+        loadSchedule();
+    };
 
     // 加载日程
     function loadSchedule() {
-        fetch('/get_schedule')
+        const weekStart = new Date(currentWeekStart);
+        weekStart.setHours(0, 0, 0, 0);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 7); // 结束日期为当前日期的7天后
+
+        fetch(`/get_schedule?start=${weekStart.toISOString()}&end=${weekEnd.toISOString()}`)
             .then(response => response.json())
             .then(data => {
                 const scheduleContainer = document.getElementById('schedule-content');
-                scheduleContainer.innerHTML = ''; // 清空现有内容
+                scheduleContainer.innerHTML = '';
 
-                if (data.schedule.length === 0) {
-                    scheduleContainer.innerHTML = '<div class="empty-message">empty</div>';
+                if (!data.schedule || data.schedule.length === 0) {
+                    scheduleContainer.innerHTML = '<div class="empty-message">无日程</div>';
                 } else {
                     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
                     days.forEach(day => {
@@ -443,7 +422,20 @@
 
                                 taskElement.classList.add(taskClass);
                                 taskElement.innerHTML = `
-                                    <h4>${task[2]}</h4>
+                                    <div class="task-header">
+                                        <h4>${task[2]}</h4>
+                                        <div class="task-actions" onclick="showActionMenu(event, ${task[0]})">
+                                            <img src="{{ url_for('static', filename='font/svg/kebab-menu.svg') }}">
+                                            <div class="action-menu" id="menu-${task[0]}">
+                                                <button onclick="handleEditSchedule(${task[0]})">
+                                                    <img src="{{ url_for('static', filename='font/svg/edit.svg') }}">编辑
+                                                </button>
+                                                <button onclick="handleDeleteSchedule(${task[0]})">
+                                                    <img src="{{ url_for('static', filename='font/svg/delete.svg') }}">删除
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <p>${task[3]}</p>
                                 `;
                                 dayElement.appendChild(taskElement);
@@ -460,19 +452,199 @@
             .catch(error => {
                 console.error('Error loading schedule:', error);
                 const scheduleContainer = document.getElementById('schedule-content');
-                scheduleContainer.innerHTML = '<div class="empty-message">Failed to load schedule.</div>';
+                scheduleContainer.innerHTML = '<div class="empty-message">加载日程失败</div>';
             });
     }
 
+    // 显示操作菜单
+    window.showActionMenu = function (event, taskId) {
+        event.stopPropagation();
+        const menu = document.getElementById(`menu-${taskId}`);
+        document.querySelectorAll('.action-menu').forEach(m => {
+            if (m !== menu) m.style.display = 'none';
+        });
+        menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+    };
+
+    // 删除日程
+    window.handleDeleteSchedule = function (taskId) {
+        if (confirm('确定删除这个日程吗？')) {
+            fetch(`/delete_schedule/${taskId}`, { method: 'DELETE' })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        showPopup('删除成功');
+                        loadSchedule();
+                    }
+                });
+        }
+    }
+
+    // 编辑日程
+    window.handleEditSchedule = function (taskId) {
+        fetch(`/get_schedule/${taskId}`)
+            .then(response => response.json())
+            .then(task => {
+                const form = document.getElementById('add-schedule-form-submit');
+                form.dataset.editId = taskId;
+
+                // 转换时间格式（移除T后的秒数）
+                const formatDateTime = (datetimeStr) => {
+                    return datetimeStr.replace(/:\d{2}\.\d{3}Z$/, '').replace(' ', 'T');
+                };
+
+                form.querySelector('#title').value = task.title;
+                form.querySelector('#content').value = task.content;
+                form.querySelector('#start_time').value = formatDateTime(task.start_time);
+                form.querySelector('#end_time').value = formatDateTime(task.end_time);
+                form.querySelector('#class').value = task.class;
+                form.querySelector('#remindicon').value = task.remindicon;
+
+                // 自动打开侧边栏
+                if (!wrapper.classList.contains('effect-active')) {
+                    effectBtn.click();
+                }
+            });
+    }
+
+    // 特效按钮逻辑
+    const effectBtn = document.getElementById('effect-btn');
+    const wrapper = document.querySelector('.content-wrapper');
+    const sidebar = document.getElementById('effect-sidebar');
+    const originalForm = document.getElementById('original-form');
+
+    // 表单提交处理函数
+    function handleFormSubmit(event) {
+        event.preventDefault();
+        const formData = new FormData(this);
+        const isEdit = !!this.dataset.editId;
+
+        const data = {
+            title: formData.get('title'),
+            content: formData.get('content'),
+            start_time: new Date(formData.get('start_time')).toISOString(),
+            end_time: new Date(formData.get('end_time')).toISOString(),
+            class: formData.get('class'),
+            remindicon: formData.get('remindicon') || 'bell',
+        };
+
+        if (isEdit) {
+            data.id = this.dataset.editId;
+            fetch('/update_schedule', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        showPopup('日程更新成功！');
+                        loadSchedule();
+                    } else {
+                        showPopup('日程更新失败：' + result.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('日程更新失败，请稍后重试。');
+                });
+        } else {
+            fetch('/modify_schedule', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        showPopup('日程添加成功！');
+                        loadSchedule();
+                    } else {
+                        showPopup('日程添加失败：' + result.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('日程添加失败，请稍后重试。');
+                });
+        }
+    }
+
+    effectBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+
+        wrapper.classList.toggle('effect-active');
+        sidebar.classList.toggle('active');
+
+        if (sidebar.classList.contains('active')) {
+            const clonedForm = originalForm.cloneNode(true);
+            clonedForm.removeAttribute('id'); // 移除克隆表单的ID
+            clonedForm.style.display = 'block';
+            
+            // 重新绑定提交事件到克隆表单
+            clonedForm.querySelector('form').addEventListener('submit', handleFormSubmit);
+            
+            sidebar.innerHTML = ''; // 清空侧边栏
+            sidebar.appendChild(clonedForm);
+            originalForm.style.display = 'none';
+        } else {
+            sidebar.innerHTML = '';
+            originalForm.style.display = 'block';
+        }
+    });
+
+    // 绑定初始表单提交事件
+    document.getElementById('add-schedule-form-submit').addEventListener('submit', handleFormSubmit);
+
+    // 点击外部区域恢复
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('#effect-btn') &&
+            !e.target.closest('.effect-sidebar') &&
+            wrapper.classList.contains('effect-active')) {
+
+            wrapper.classList.remove('effect-active');
+            sidebar.classList.remove('active');
+            sidebar.innerHTML = '';
+            originalForm.style.display = 'none';
+        }
+    });
+
+    // 阻止特效激活时打开通知
+    const notificationIcon = document.getElementById('notification-icon');
+    notificationIcon.addEventListener('click', function (e) {
+        if (wrapper.classList.contains('effect-active')) {
+            e.stopImmediatePropagation();
+            return false;
+        }
+    });
+
+    // 处理通知图标的点击事件
+    document.getElementById('notification-icon').addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation(); // 阻止事件冒泡
+        var notificationContent = document.getElementById('notification-content');
+        var overlay = document.getElementById('overlay');
+        notificationContent.classList.toggle('show');
+        overlay.classList.toggle('show');
+    });
+
+    // 点击遮罩层隐藏通知内容
+    document.getElementById('overlay').addEventListener('click', function () {
+        var notificationContent = document.getElementById('notification-content');
+        var overlay = document.getElementById('overlay');
+        notificationContent.classList.remove('show');
+        overlay.classList.remove('show');
+    });
+
     // 处理用户菜单显示/隐藏
-    document.getElementById('avatar-img').addEventListener('click', function(event) {
+    document.getElementById('avatar-img').addEventListener('click', function (event) {
         var userMenu = document.getElementById('user-menu');
         userMenu.classList.toggle('show');
         event.stopPropagation();
     });
 
     // 点击 body 上的其他区域隐藏菜单
-    document.body.addEventListener('click', function(event) {
+    document.body.addEventListener('click', function (event) {
         var userMenu = document.getElementById('user-menu');
         if (!userMenu.contains(event.target) && !document.getElementById('avatar-img').contains(event.target)) {
             userMenu.classList.remove('show');
@@ -480,10 +652,18 @@
     });
 
     // 页面加载时调用
-    window.onload = function() {
-        loadSchedule();
-    };
+    updateWeekDisplay();
+    loadSchedule();
+
+    // 添加全局点击监听来关闭菜单
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('.task-actions')) {
+            document.querySelectorAll('.action-menu').forEach(menu => {
+                menu.style.display = 'none';
+            });
+        }
+    });
 });
-    </script>
+        </script>
 </body>
 </html>

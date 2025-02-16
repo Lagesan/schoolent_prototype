@@ -1,0 +1,49 @@
+{% extends "layout.html" %}
+{% block title %}问卷管理{% endblock %}
+
+{% block content %}
+<h1>问卷管理</h1>
+<table class="manage-table">
+    <thead>
+        <tr>
+            <th>问卷标题</th>
+            <th>创建时间</th>
+            <th>参与人数</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for survey in surveys %}
+        <tr>
+            <td>{{ survey.title }}</td>
+            <td>{{ survey.created_at }}</td>
+            <td>{{ survey.responses }}</td>
+            <td>
+                <a href="/manage/{{ survey.id }}" class="btn">查看详情</a>
+                <button class="btn danger" onclick="deleteSurvey('{{ survey.id }}')">删除</button>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="4" class="empty">暂无创建的问卷</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function deleteSurvey(surveyId) {
+    if (confirm('确定要删除这个问卷吗？')) {
+        fetch(`/survey/${surveyId}`, {
+            method: 'DELETE'
+        }).then(response => {
+            if (response.ok) {
+                location.reload();
+            }
+        });
+    }
+}
+</script>
+{% endblock %}
