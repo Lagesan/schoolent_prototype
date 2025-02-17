@@ -3,7 +3,7 @@ import sqlite3, json
 import os, time, requests,urllib.parse
 import shutil
 from flask_socketio import SocketIO, emit
-from banalysis import download_bilibili_video
+from banalysis import *
 import subprocess, threading, time
 from markdown.extensions.fenced_code import FencedCodeExtension
 from datetime import datetime
@@ -86,7 +86,8 @@ def init_db():
                             email TEXT DEFAULT 'None',
                             sex TEXT DEFAULT 'None',
                             classroom TEXT DEFAULT 'None',
-                            birthday TEXT DEFAULT 'None')''')
+                            birthday TEXT DEFAULT 'None',
+                            noti_num INTEGER DEFAULT 0)''')
         # create notifications table
         cursor.execute('''CREATE TABLE IF NOT EXISTS notifications (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,8 +103,7 @@ def init_db():
                             content TEXT NOT NULL,
                             start_time TEXT NOT NULL,
                             end_time TEXT NOT NULL,
-                            class TEXT NOT NULL,
-                            remindicon TEXT DEFAULT "bell")''')
+                            class TEXT NOT NULL)''')
         # create messages table
         # cursor.execute('''DROP TABLE IF EXISTS messages''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS messages (
@@ -206,7 +206,38 @@ def get_spark_response(user_input):
     except Exception as e:
         print("request failed", e)
         return "Error: Unable to get response from Spark API"
-
+def get_series_info(bvid, headers):
+    """
+    获取视频是否为合集及分集信息
+    """
+    view_url = f"https://api.bilibili.com/x/web-interface/view?bvid={bvid}"
+    response = requests.get(view_url, headers=headers)
+    try:
+        data = response.json()
+        if data['code'] != 0:
+            print(f"Error: {data['message']}")
+            return None
+        
+        video_count = data['data']['videos']
+        duration = data['data']['duration']
+        pages = data['data'].get('pages', [])
+        sub_videos = []
+        for page in pages:
+            sub_videos.append({
+                'cid': page['cid'],
+                'page': page['page'],
+                'part': page['part'],
+                'duration': page['duration']
+            })
+        
+        return {
+            'is_series': video_count > 1,
+            'duration': duration,
+            'sub_videos': sub_videos
+        }
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return None
 
 def get_random_bv():
     url = "https://api.bilibili.com/x/web-interface/index/top/rcmd?version=1"
@@ -353,18 +384,31 @@ def dashboard():
     if 'user_id' not in session:
         flash('You need to log in to access the dashboard.', 'warning')
         return redirect(url_for('login'))
+    
     with sqlite3.connect('app.db') as conn:
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM notifications ORDER BY time DESC')
         notifications = cursor.fetchall()
+        
         # 获取用户头像路径
         cursor.execute('SELECT avatar_route FROM users WHERE id = ?', (session['user_id'],))
         result = cursor.fetchone()
         if result:
             avatar_route = result[0]
-    # print(notifications)
-    return render_template('dashboard.html', notifications=notifications, avatar_route="/avatar/"+avatar_route)
-
+        
+        # 获取通知总数
+        cursor.execute('SELECT COUNT(*) FROM notifications')
+        total_notifications = cursor.fetchone()[0]
+        
+        # 获取用户的未读通知数
+        cursor.execute('SELECT noti_num FROM users WHERE id = ?', (session['user_id'],))
+        user_noti_num = cursor.fetchone()[0]
+    
+    return render_template('dashboard.html', 
+                           notifications=notifications, 
+                           avatar_route="/avatar/"+avatar_route,
+                           total_notifications=total_notifications,
+                           user_noti_num=user_noti_num)
 @app.route('/logout')
 def logout():
     session.pop('user_id', None)
@@ -403,7 +447,6 @@ def modify_schedule():
     start_time = data.get('start_time')
     end_time = data.get('end_time')
     class_level = data.get('class')
-    remindicon = data.get('remindicon', 'bell')
     print(data)
 
     # 转换时间格式
@@ -417,10 +460,10 @@ def modify_schedule():
         with sqlite3.connect('app.db') as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO schedule (user_id, title, content, start_time, end_time, class, remindicon)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO schedule (user_id, title, content, start_time, end_time, class)
+                VALUES (?, ?, ?, ?, ?, ?)
             ''', (session['user_id'], title, content, start_time.strftime('%Y-%m-%d %H:%M:%S'), 
-                 end_time.strftime('%Y-%m-%d %H:%M:%S'), class_level, remindicon))
+                 end_time.strftime('%Y-%m-%d %H:%M:%S'), class_level))
             conn.commit()
             return jsonify({
                 'success': True,
@@ -442,7 +485,6 @@ def update_schedule():
     start_time = data.get('start_time')
     end_time = data.get('end_time')
     class_level = data.get('class')
-    remindicon = data.get('remindicon', 'bell')
 
     try:
         start_time = datetime.fromisoformat(start_time.replace('Z', ''))
@@ -456,11 +498,11 @@ def update_schedule():
             cursor.execute('''
                 UPDATE schedule SET
                 title = ?, content = ?, start_time = ?, end_time = ?,
-                class = ?, remindicon = ?
+                class = ?
                 WHERE id = ? AND user_id = ?
             ''', (
                 title, content, start_time.strftime('%Y-%m-%d %H:%M:%S'), 
-                end_time.strftime('%Y-%m-%d %H:%M:%S'), class_level, remindicon,
+                end_time.strftime('%Y-%m-%d %H:%M:%S'), class_level,
                 task_id, session['user_id']
             ))
             conn.commit()
@@ -535,8 +577,7 @@ def get_single_schedule(task_id):
                 'content': task[3],
                 'start_time': task[4].replace(' ', 'T'),  # 转换为前端需要的格式
                 'end_time': task[5].replace(' ', 'T'),
-                'class': task[6],
-                'remindicon': task[7]
+                'class': task[6]
             }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -571,15 +612,14 @@ def update_schedule_put():
     start_time = request.form.get('start_time')
     end_time = request.form.get('end_time')
     class_level = request.form.get('class')
-    remindicon = request.form.get('remindicon', 'bell')
 
     try:
         with sqlite3.connect('app.db') as conn:
             cursor = conn.cursor()
             cursor.execute('''UPDATE schedule SET
                 title = ?, content = ?, start_time = ?, end_time = ?,
-                class = ?, remindicon = ? WHERE id = ? AND user_id = ?''',
-                (title, content, start_time, end_time, class_level, remindicon, 
+                class = ? WHERE id = ? AND user_id = ?''',
+                (title, content, start_time, end_time, class_level,
                  task_id, session['user_id']))
             conn.commit()
             return jsonify({'success': True})
@@ -623,25 +663,49 @@ def restart():
 
 @app.route('/search_videos', methods=['GET'])
 def search_videos():
-    page_size = request.args.get('page_size', 10)
-    keyword = request.args.get('keyword', '')
+    page_size = request.args.get('page_size', 10, type=int)
+    keyword = request.args.get('keyword', '', type=str)
     if not keyword:
-        return jsonify({'error': 'Keyword is required'}), 400
-    keyword_encoded = urllib.parse.quote(keyword)
-    url = f"https://api.bilibili.com/x/web-interface/wbi/search/type?page_size={page_size}&keyword={keyword_encoded}&search_type=video"
-    response = requests.get(url, headers=headers)
+        return jsonify({'error': '关键词不能为空'}), 400
+    
+    # 请求 B 站搜索 API
+    search_url = f"https://api.bilibili.com/x/web-interface/wbi/search/type?page_size={page_size}&keyword={urllib.parse.quote(keyword)}&search_type=video"
     try:
-        if response.status_code == 200:
-            data = response.json()
-            if data['code'] == 0 and 'result' in data['data']:
-                videos = [{'bv_id': video['bvid'], 'title': video['title'], 'duration':video['duration'], 'author': video['author']} for video in data['data']['result']]
-                return jsonify({'videos': videos}), 200
-            else:
-                return jsonify({'error': 'No videos found'}), 404
-        else:
-            return jsonify({'error': 'Failed to fetch videos'}), 500
-    except ValueError:
-        return jsonify({'error': 'Error decoding JSON response'}), 500
+        response = requests.get(search_url, headers=headers)
+        if response.status_code != 200:
+            return jsonify({'error': '请求失败'}), 500
+        
+        data = response.json()
+        if data['code'] != 0:
+            return jsonify({'error': data['message']}), 500
+        
+        # 提取视频信息并添加合集信息
+        videos = []
+        for video in data['data']['result']:
+            # 获取合集信息
+            bvid = video['bvid']
+            series_info = get_series_info(bvid, headers)
+            
+            video_data = {
+                'bv_id': bvid,
+                'title': video['title'],
+                'duration': video['duration'],
+                'author': video['author'],
+                'is_series': False,
+                'sub_videos': []
+            }
+            
+            if series_info:
+                video_data['is_series'] = series_info['is_series']
+                video_data['sub_videos'] = series_info['sub_videos']
+                video_data['duration'] = series_info['duration']
+            
+            videos.append(video_data)
+        
+        return jsonify({'videos': videos}), 200
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return jsonify({'error': '请求失败'}), 500
 
 @app.route('/bkend', methods=['GET', 'POST'])
 def bkend():
@@ -891,33 +955,74 @@ def convert_video_to_mp4(input_path, output_path):
         print(f"Error converting video: {e}")
         return False
 
-@app.route('/bv/<bv_id>', methods=['GET'])
-def download_bv(bv_id):
-    refine = request.args.get('refine', 'false').lower() == 'true'
-    output_path = os.path.join(app.config['BILIBILI_FOLDER'], f'{bv_id}.mp4')
-    temp_output_path = os.path.join(app.config['BILIBILI_FOLDER'], f'{bv_id}_temp.mp4')
-    
-    with processing_lock:
-        processing_videos.add(temp_output_path)
+@app.route('/mark_notifications_as_read', methods=['POST'])
+def mark_notifications_as_read():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 401
     
     try:
-        # 下载视频到临时路径
-        download_bilibili_video(bv_id, temp_output_path)
-        
+        with sqlite3.connect('app.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT COUNT(*) FROM notifications')
+            total_notifications = cursor.fetchone()[0]
+            cursor.execute('UPDATE users SET noti_num = ? WHERE id = ?', (total_notifications, session['user_id']))
+            conn.commit()
+        return jsonify({'success': True, 'message': 'Notifications marked as read'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/bv/<bv_id>', methods=['GET'])
+def download_bv(bv_id):
+    # 是否进行精校
+    refine = request.args.get('refine', 'false').lower() == 'true'
+
+    # 是否指定分集
+    p = request.args.get('p', None)
+
+    # 构建输出路径
+    if p:
+        output_path = os.path.join(app.config['BILIBILI_FOLDER'], f'{bv_id}_p{p}.mp4')
+        temp_output_path = os.path.join(app.config['BILIBILI_FOLDER'], f'{bv_id}_p{p}_temp.mp4')
+    else:
+        output_path = os.path.join(app.config['BILIBILI_FOLDER'], f'{bv_id}.mp4')
+        temp_output_path = os.path.join(app.config['BILIBILI_FOLDER'], f'{bv_id}_temp.mp4')
+
+    # 添加到正在处理的视频集合
+    with processing_lock:
+        processing_videos.add(temp_output_path)
+
+    try:
+        # 下载指定分集或整个视频
+        if p:
+            download_bilibili_video_p(bv_id, p, temp_output_path)
+        else:
+            download_bilibili_video(bv_id, temp_output_path)
+
+        # 转换视频编码（如果需要）
         if refine:
-            # 转换视频编码
             if convert_video_to_mp4(temp_output_path, output_path):
                 os.remove(temp_output_path)  # 删除临时文件
-                return jsonify({'status': 'success', 'output_path': url_for('uploaded_bv', filename=f'{bv_id}.mp4')}), 200
             else:
                 return jsonify({'status': 'error', 'message': 'Failed to convert video'}), 500
         else:
             # 不进行精校，直接返回下载的视频
             os.rename(temp_output_path, output_path)
-            return jsonify({'status': 'success', 'output_path': url_for('uploaded_bv', filename=f'{bv_id}.mp4')}), 200
+
+        # 构建返回结果
+        response_data = {
+            'status': 'success',
+            'output_path': url_for('uploaded_bv', filename=os.path.basename(output_path)),
+            'series': get_series_info(bv_id, headers) if p is None else None  # 如果没有指定 p，返回合集信息
+        }
+        return jsonify(response_data), 200
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
     finally:
+        # 移除临时文件路径
         with processing_lock:
-            processing_videos.remove(temp_output_path)
+            processing_videos.discard(temp_output_path)
 
 @app.route('/other_videos', methods=['GET'])
 def other_videos():

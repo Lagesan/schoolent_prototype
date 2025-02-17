@@ -20,7 +20,7 @@
             background-color: #007bff;
             color: white;
             padding: 15px 20px;
-            text-align: left; /* 标题左对齐 */
+            text-align: left;
             display: flex;
             align-items: center;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -30,7 +30,7 @@
             margin: 0;
             font-size: 24px;
             font-weight: 600;
-            margin-left: 10px; /* 标题与返回图标的间距 */
+            margin-left: 10px;
         }
 
         .container {
@@ -107,28 +107,37 @@
             border-radius: 4px;
             background-color: #f9f9f9;
         }
-
-        #search-results p,
-        #recommended-bv p {
-            margin: 10px 0;
-            padding: 10px;
-            background-color: white;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-
-        #progress {
-            margin-top: 10px;
-            font-weight: 600;
-            color: #007bff;
-        }
-
         video {
             width: 100%;
             max-width: 600px;
             margin-top: 15px;
             border-radius: 4px;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .video-card {
+            background-color: #ffffff;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .series-info {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .sub-videos {
+            margin-top: 10px;
+        }
+
+        .sub-video {
+            margin-bottom: 5px;
+            padding: 5px;
+            background-color: #e9ecef;
+            border-radius: 3px;
         }
 
         .note {
@@ -203,7 +212,6 @@
                         videoElement.setAttribute('controls', '');
                         videoElement.setAttribute('src', data.output_path);
                         document.getElementById('result').appendChild(videoElement);
-                        fetchOtherVideos();
                     } else {
                         progressElement.innerHTML = '';
                         document.getElementById('result').innerHTML = `<p>Error: ${data.error}</p>`;
@@ -228,13 +236,47 @@
                     searchResultsElement.innerHTML = '';
                     if (data.videos) {
                         data.videos.forEach(video => {
-                            searchResultsElement.innerHTML += `
-                                <p><strong>BV号:</strong> ${video.bv_id}</p>
-                                <p><strong>标题:</strong> ${video.title}</p>
-                                <p><strong>时长:</strong> ${video.duration}</p>
-                                <p><strong>UP主:</strong> ${video.author}</p>
+                            let html = `
+                                <div class="video-card">
+                                    <h4>BV号: ${video.bv_id}</h4>
+                                    <p>标题: ${video.title}</p>
+                                    <p>时长: ${formatDuration(video.duration)}</p>
+                                    <p>UP主: ${video.author}</p>
+                                    ${video.is_series ? `
+                                        <div class="series-info">
+                                            <h5>该视频是合集</h5>
+                                            <div class="sub-videos">
+                                                ${video.sub_videos.map(sub => `
+                                                    <div class="sub-video">
+                                                        <span>第 ${sub.page} 集: ${sub.part}</span>
+                                                        <span>时长: ${formatDuration(sub.duration)}</span>
+                                                        <button class="download-sub-btn" data-bvid="${video.bv_id}" data-p="${sub.page}">下载</button>
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+                                    ` : `
+                                        <p>该视频不是合集</p>
+                                        <button class="download-btn" data-bvid="${video.bv_id}">下载</button>
+                                    `}
+                                </div>
                                 <hr>
                             `;
+                            searchResultsElement.innerHTML += html;
+                        });
+
+                        // 为分集下载按钮添加点击事件监听器
+                        document.querySelectorAll('.download-sub-btn').forEach((btn) => {
+                            btn.addEventListener('click', function() {
+                                handleDownload(this.dataset.bvid, this.dataset.p);
+                            });
+                        });
+
+                        // 为非合集下载按钮添加点击事件监听器
+                        document.querySelectorAll('.download-btn').forEach((btn) => {
+                            btn.addEventListener('click', function() {
+                                handleDownload(this.dataset.bvid);
+                            });
                         });
                     } else {
                         searchResultsElement.innerHTML = `<p>Error: ${data.error}</p>`;
@@ -243,7 +285,45 @@
                 .catch(error => {
                     document.getElementById('search-results').innerHTML = `<p>Error: ${error.message}</p>`;
                 });
+
+            function formatDuration(seconds) {
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                const secs = seconds % 60;
+                return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
         });
+
+        function handleDownload(bvId, p = null) {
+            const refine = document.getElementById('refine').checked;
+            const progressElement = document.getElementById('progress');
+            const downloadResultElement = document.getElementById('result');
+            const downloadButton = document.getElementById('download-button');
+            
+            downloadButton.style.display = 'none'; // 隐藏按钮
+            progressElement.innerHTML = 'Downloading...';
+
+            fetch(`/bv/${bvId}?p=${p}&refine=${refine}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        progressElement.innerHTML = 'Download completed!';
+                        downloadResultElement.innerHTML = `
+                            <p>Download successful! Video saved at: ${data.output_path}</p>
+                            <video controls src="${data.output_path}"></video>
+                        `;
+                    } else {
+                        progressElement.innerHTML = '';
+                        downloadResultElement.innerHTML = `<p>Error: ${data.error}</p>`;
+                    }
+                    downloadButton.style.display = 'block'; // 显示按钮
+                })
+                .catch(error => {
+                    progressElement.innerHTML = '';
+                    downloadResultElement.innerHTML = `<p>Error: ${error.message}</p>`;
+                    downloadButton.style.display = 'block'; // 显示按钮
+                });
+        }
 
         function fetchOtherVideos() {
             fetch('/other_videos')

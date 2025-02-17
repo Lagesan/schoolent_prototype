@@ -11,6 +11,17 @@
         main {
             padding: 20px;
         }
+        .notification-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: red;
+            border-radius: 50%;
+            position: relative;
+            margin: 0 0 0 0;
+            top: -20px;
+            left: -18px;
+        }
         .schedule-container {
             background-color: #fff;
             border-radius: 12px;
@@ -74,6 +85,10 @@
         .task-informal {
             background-color: #fff3e0;
             border-left-color: #ffb74d;
+        }
+        .task-goal {
+            border-left-color: #80ff37;
+            background-color: #e1febe;
         }
         .day {
             background-color: #f9f9f9;
@@ -160,7 +175,17 @@
             pointer-events: none;
         }
         .add-schedule-form {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             display: none;
+        }
+
+        .add-schedule-form h2 {
+            margin-top: 0;
+            font-size: 1.5em;
+            color: #333;
         }
         .effect-sidebar {
             position: fixed;
@@ -212,23 +237,23 @@
             right: 0;
             top: 28px;
             margin-top: 5px;
-            z-index: 1001;  /* 提高层级 */
-            background: #2c3e50;
+            z-index: 1001;
+            background: #ffffff;
             box-shadow: 0 2px 8px rgba(0,0,0,0.2);
             border-radius: 6px;
-            padding: 6px 0;
+            padding: 0 0;
             display: none;
             min-width: 120px;
-            border: 1px solid #34495e;
+            border: 1px solid #b5b5b5c2;
         }
         .action-menu button {
             background: none;
             border: none;
-            padding: 8px 16px;
+            padding: 10px 16px;
             width: 100%;
             text-align: left;
             cursor: pointer;
-            color: #ecf0f1;
+            color: #333;
             font-size: 14px;
             transition: all 0.2s;
             display: flex;
@@ -236,13 +261,53 @@
             gap: 8px;
         }
         .action-menu button:hover {
-            background-color: #34495e;
-            color: #fff;
+            background-color: #d8d8d8;
+            color: #333;
         }
         .action-menu button img {
             width: 14px;
             height: 14px;
-            filter: brightness(0) invert(1);
+            color: #333;
+        }
+
+        /* 添加日程部分 */
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 1em;
+            margin-top: 8px;
+            margin-bottom: 12px;
+            box-sizing: border-box; /* 确保宽度包括内间距 */
+        }
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+            border-color: #007bff;
+            box-shadow: 0 0 4px rgba(0, 123, 255, 0.5);
+            outline: none;
+        }
+        .form-group input::placeholder, .form-group textarea::placeholder {
+            color: #aaa;
+            font-style: italic;
+        }
+        .form-group select {
+            appearance: none; /* 去掉默认样式 */
+            background: url('{{ url_for("static", filename="font/svg/arrow-down.svg") }}') no-repeat calc(100% - 10px) center;
+            background-size: 25px;
+        }
+        .add-schedule-form button[type="submit"] {
+            background: linear-gradient(to right, #007bff, #0056b3);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 12px 24px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .add-schedule-form button[type="submit"]:hover {
+            background: linear-gradient(to right, #0056b3, #003d82);
         }
     </style>
 </head>
@@ -258,8 +323,11 @@
             </a>
             <div class="user-info" id="avatar-img">
                 <div class="notification-icon" id="notification-icon">
-                    <img src="{{ url_for('static', filename='font/svg/noti.svg') }}" style="border: none;">
-                </div>
+            <img src="{{ url_for('static', filename='font/svg/noti.svg') }}" style="border: none;">
+            {% if total_notifications != user_noti_num %}
+                <span class="notification-dot"></span>
+            {% endif %}
+        </div>
                 <img src="{{ avatar_route }}" alt="头像">
                 <span>{{ session['username'] }}</span>
             </div>
@@ -274,7 +342,7 @@
         <main>
             <div class="schedule-container">
                 <div class="schedule-header">
-                    <h2>2023年10月16日 - 2023年10月20日</h2>
+                    <h2>XXXX年XX月XX日 - XXXX年XX月XX日</h2>
                     <div class="effect-button" id="effect-btn">
                         <img src="{{ url_for('static', filename='font/svg/add_schedule.svg') }}" alt="add a new schedule">
                     </div>
@@ -314,11 +382,8 @@
                         <option value="1">紧急</option>
                         <option value="2">正式</option>
                         <option value="3">非正式</option>
+                        <option value="4">目标</option>
                     </select>
-                </div>
-                <div class="form-group">
-                    <label for="remindicon">提醒图标</label>
-                    <input type="text" id="remindicon" name="remindicon" placeholder="默认: bell">
                 </div>
                 <button type="submit">添加日程</button>
             </form>
@@ -345,6 +410,7 @@
                 <li><a href="/dashboard"><i class="iconfont home" style="font-size: 25px;margin-right: 5px;"></i>Home</a></li>
                 <li><a href="/settings/profile"><i class="iconfont profile" style="font-size: 24px;margin-right: 5px;"></i>Profile</a></li>
                 <li><a href="/b_dl"><i class="iconfont tv" style="font-size: 24px;margin-right: 5px;"></i>Study resources download</a></li>
+                <li><a href="/qs"><i class="iconfont icon-send" style="font-size: 24px;margin-right: 5px;"></i>Questionnaire Center</a></li>
                 <li><a href="/logout"><i class="iconfont logout" style="font-size: 24px;margin-right: 5px;"></i>Logout</a></li>
             </ul>
         </div>
@@ -402,7 +468,7 @@
                         dayElement.innerHTML = `<h3>${day}</h3>`;
                         scheduleContainer.appendChild(dayElement);
 
-                        const tasksForDay = data.schedule.filter(task => task[8] === day);
+                        const tasksForDay = data.schedule.filter(task => task[7] === day);
                         if (tasksForDay.length > 0) {
                             tasksForDay.forEach(task => {
                                 const taskElement = document.createElement('div');
@@ -418,6 +484,8 @@
                                     taskClass = 'task-formal';
                                 } else if (classLevel === '3') {
                                     taskClass = 'task-informal';
+                                } else if (classLevel === '4') {
+                                    taskClass = 'task-goal';
                                 }
 
                                 taskElement.classList.add(taskClass);
@@ -492,13 +560,12 @@
                 const formatDateTime = (datetimeStr) => {
                     return datetimeStr.replace(/:\d{2}\.\d{3}Z$/, '').replace(' ', 'T');
                 };
-
+                console.log(task);
                 form.querySelector('#title').value = task.title;
                 form.querySelector('#content').value = task.content;
                 form.querySelector('#start_time').value = formatDateTime(task.start_time);
                 form.querySelector('#end_time').value = formatDateTime(task.end_time);
                 form.querySelector('#class').value = task.class;
-                form.querySelector('#remindicon').value = task.remindicon;
 
                 // 自动打开侧边栏
                 if (!wrapper.classList.contains('effect-active')) {
@@ -525,7 +592,6 @@
             start_time: new Date(formData.get('start_time')).toISOString(),
             end_time: new Date(formData.get('end_time')).toISOString(),
             class: formData.get('class'),
-            remindicon: formData.get('remindicon') || 'bell',
         };
 
         if (isEdit) {
@@ -618,15 +684,36 @@
         }
     });
 
-    // 处理通知图标的点击事件
     document.getElementById('notification-icon').addEventListener('click', function (event) {
-        event.preventDefault();
-        event.stopPropagation(); // 阻止事件冒泡
-        var notificationContent = document.getElementById('notification-content');
-        var overlay = document.getElementById('overlay');
-        notificationContent.classList.toggle('show');
-        overlay.classList.toggle('show');
+    event.preventDefault();
+    event.stopPropagation(); // 阻止事件冒泡
+    var notificationContent = document.getElementById('notification-content');
+    var overlay = document.getElementById('overlay');
+    notificationContent.classList.toggle('show');
+    overlay.classList.toggle('show');
+
+    // 发送请求更新通知为已读
+    fetch('/mark_notifications_as_read', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // 隐藏红点
+            const notificationDot = document.querySelector('.notification-dot');
+            if (notificationDot) notificationDot.style.display = 'none';
+        } else {
+            alert('Failed to mark notifications as read: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
     });
+});
 
     // 点击遮罩层隐藏通知内容
     document.getElementById('overlay').addEventListener('click', function () {
@@ -664,6 +751,6 @@
         }
     });
 });
-        </script>
+    </script>
 </body>
 </html>
