@@ -8,7 +8,6 @@ import subprocess, threading, time
 from markdown.extensions.fenced_code import FencedCodeExtension
 from datetime import datetime
 import markdown, uuid
-from datetime import datetime
 
 app = Flask(__name__, static_folder='templates/static')
 app.secret_key = os.urandom(24)
@@ -267,7 +266,7 @@ def get_qsdb():
 
 
 # 初始化 SocketIO
-socketio = SocketIO(app)
+socketio = SocketIO(app, async_mode='threading')
 online_users = 0
 online_user_ids = set()
 
@@ -936,7 +935,33 @@ def handle_message():
 
 @app.route('/b_dl')
 def bilibili_dl():
-    return render_template('dl_b.html')
+    if 'user_id' not in session:
+        flash('You need to log in to access the dashboard.', 'warning')
+        return redirect(url_for('login'))
+    with sqlite3.connect('app.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM notifications ORDER BY time DESC')
+        notifications = cursor.fetchall()
+        
+        # 获取用户头像路径
+        cursor.execute('SELECT avatar_route FROM users WHERE id = ?', (session['user_id'],))
+        result = cursor.fetchone()
+        if result:
+            avatar_route = result[0]
+        
+        # 获取通知总数
+        cursor.execute('SELECT COUNT(*) FROM notifications')
+        total_notifications = cursor.fetchone()[0]
+        
+        # 获取用户的未读通知数
+        cursor.execute('SELECT noti_num FROM users WHERE id = ?', (session['user_id'],))
+        user_noti_num = cursor.fetchone()[0]
+    
+    return render_template('dl_b.html', 
+                           notifications=notifications, 
+                           avatar_route="/avatar/"+avatar_route,
+                           total_notifications=total_notifications,
+                           user_noti_num=user_noti_num)
 
 def convert_video_to_mp4(input_path, output_path):
     command = [

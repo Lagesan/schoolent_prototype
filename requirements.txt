@@ -1,8 +1,8 @@
-Flask==2.1.2
-Flask-SocketIO==5.3.2
-requests==2.26.0
+Flask==3.0.3
+Flask-SocketIO==5.5.1
+requests==2.31.0
 python-socketio==5.5.2
-eventlet==0.33.0
-sqlite3==3.36.0
-yt_dlp==2025.1.15
+Flask-SocketIO==5.5.1
+yt_dlp==2025.2.19
 Markdown==3.7
+urllib3==1.26.19
