@@ -1,13 +1,17 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, jsonify, Response
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, jsonify, Response, make_response, abort
 import sqlite3, json
 import os, time, requests,urllib.parse
-import shutil
+import shutil, random
 from flask_socketio import SocketIO, emit
 from banalysis import *
-import subprocess, threading, time
+import subprocess, threading
 from markdown.extensions.fenced_code import FencedCodeExtension
-from datetime import datetime
-import markdown, uuid
+from bs4 import BeautifulSoup
+from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime, timezone, timedelta
+import uuid, signal
+from markdown import markdown as md
+import feedparser, re
 
 app = Flask(__name__, static_folder='templates/static')
 app.secret_key = os.urandom(24)
@@ -20,9 +24,10 @@ app.config['MAX_CONTENT_LENGTH'] = None
 app.config['SESSION_TYPE'] = 'sqlalchemy'
 app.config["PRIVATE_CHAT"] = 'chat/'
 app.config["USERS_SETTING"] = 'users/'
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['UPLOAD_FOLDER'] = 'uploads/'
 app.config['BILIBILI_FOLDER'] = 'gv/'
-
+app.config['COMMUNITY_FOLDER'] = 'community/'
 
 # 用于记录正在处理的视频文件名
 processing_videos = set()
@@ -45,7 +50,28 @@ with open("server.set", "r") as f:
     # close the file
     f.close()
         
-        
+headers = ''
+# config the bilibili request headers from local file:header.set, if not exist create one
+if not os.path.exists("header.set"):
+    with open("header.set", "w") as f:
+        f.write("headers=")
+
+with open('header.set', 'r') as f:
+    # read headers from header.set (info after "=")
+    info = f.read().strip()
+    if info == 'headers=':
+        print("Please input the headers of the bilibili api")
+    elif info:
+        try:
+            headers = eval(info.split("=", 1)[1])  # Use eval to parse the dictionary string
+            if not isinstance(headers, dict):
+                raise ValueError("Parsed headers are not a dictionary.")
+        except (SyntaxError, ValueError):
+            print("Invalid headers format in header.set. Please check the file content.")
+            headers = {}
+    # close the file
+    f.close()
+
 # folder init
 def init_folders():
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -56,6 +82,9 @@ def init_folders():
 
     if not os.path.exists(app.config['USERS_SETTING']):
         os.makedirs(app.config['USERS_SETTING'])
+
+    if not os.path.exists(app.config['COMMUNITY_FOLDER']):
+        os.makedirs(app.config['COMMUNITY_FOLDER'])
 
     avatar_folder = os.path.join(app.config['USERS_SETTING'], 'avatar')
     if not os.path.exists(avatar_folder):
@@ -149,34 +178,25 @@ def init_db():
                     FOREIGN KEY(survey_id) REFERENCES surveys(id),
                     FOREIGN KEY(question_id) REFERENCES questions(id),
                     FOREIGN KEY(user_id) REFERENCES users(id))''')
+        # notes
+        cursor.execute('''CREATE TABLE IF NOT EXISTS notes (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_id INTEGER NOT NULL,
+                            title TEXT NOT NULL,
+                            content TEXT NOT NULL,
+                            created_at DATETIME NOT NULL,
+                            updated_at DATETIME NOT NULL,
+                            FOREIGN KEY(user_id) REFERENCES users(id))''')
+        # 目标表
+        cursor.execute('''CREATE TABLE IF NOT EXISTS goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            due_time TEXT,
+            created_at DATETIME NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id))
+        ''')
         conn.commit()
-
-
-# Bibili API headers
-headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'Referer': 'https://www.bilibili.com/',
-        'Origin': 'https://www.bilibili.com',
-        'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7,de;q=0.6',
-        'Accept-Encoding': 'gzip, deflate, br, zstd',
-        'Connection': 'keep-alive',
-        'DNT': '1',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'cookie': 'CURRENT_FNVAL=4048; rpdid=|(umY)k)|kmJ0J\'u~|Rl)lJYk; buvid3=8640B8DE-98F8-3194-60BB-CA6DB6FFC0CA68669infoc; b_nut=1719641968; PVID=1; _uuid=6241082A2-CCE10-56610-9CC1-5AB115C9BEFE86135infoc; LIVE_BUVID=AUTO7017222538454308; CURRENT_BLACKGAP=0; home_feed_column=5; CURRENT_QUALITY=64; fingerprint=fd73a99ca8eee2230ce41153babb706d; buvid_fp=fd73a99ca8eee2230ce41153babb706d; b_lsid=9A5C7C53_19464359093; bili_ticket=eyJhbGciOiJIUzI1NiIsImtpZCI6InMwMyIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3MzcxMDcyMTksImlhdCI6MTczNjg0Nzk1OSwicGx0IjotMX0.3LOyrrHumo_WHI7E1y2EGNznqCW5QmQOxMU1nxjvEFU; bili_ticket_expires=1737107159; buvid4=5AA1AC0B-F4DA-26F2-02C5-2CF08B83CC9B20380-025011409-7XY6MkURWSTD74UlnZFOXg%3D%3D; sid=nvthhvah; header_theme_version=CLOSE; enable_web_push=DISABLE; browser_resolution=1528-712',
-        'priority': 'u=0, i',
-        'sec-ch-ua': '"Microsoft Edge";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"Windows"',
-        'sec-fetch-dest': 'document',
-        'sec-fetch-mode': 'navigate',
-        'sec-fetch-site': 'none',
-        'sec-fetch-user': '?1',
-        'upgrade-insecure-requests': '1',
-    }
-
-
 
 
 def get_spark_response(user_input):
@@ -263,32 +283,128 @@ def get_qsdb():
     conn.row_factory = sqlite3.Row  # 可选：设置行工厂
     return conn
 
+# 临时存储文章数据
+articles = []
+
+# 修改rss_feeds结构（放在全局变量区域）
+newspapers = {
+    'ppd': {
+        'name': '人民日报',
+        'feeds': ['http://www.people.com.cn/rss/world.xml'],
+        'icon': 'http://www.people.com.cn/favicon.ico'
+    },
+    'gmb': {
+        'name': '光明日报',
+        'feeds': ['https://plink.anyfeeder.com/guangmingribao'],
+        'icon': 'https://www.gmw.cn/favicon.ico'
+    },
+    'zxw': {
+        'name': '中新网',
+        'feeds': ['https://www.chinanews.com.cn/rss/society.xml'],
+        'icon': 'https://www.chinanews.com.cn/favicon.ico'
+    },
+    'k-tech': {
+        'name': '快科技',
+        'feeds': ['https://plink.anyfeeder.com/mydrivers'],
+        'icon': 'https://www.mydrivers.com/favicon.ico'
+    },
+    'huxiu': {
+        'name': '虎嗅网',
+        'feeds': ['https://www.huxiu.com/rss/0.xml'],
+        'icon': '/avatar/noface.png'
+    },
+    'bbc':{
+        'name': 'BBC',
+        'feeds': ['https://plink.anyfeeder.com/bbc/business'],
+        'icon': '/avatar/noface.png'
+    }
+}
+
+def fetch_feeds():
+    global articles
+    new_articles = []
+    article_id = 0  # Initialize article ID
+    
+    for paper_id, paper_info in newspapers.items():
+        for feed_url in paper_info['feeds']:
+            retries = 3
+            for attempt in range(retries):
+                try:
+                    feed = feedparser.parse(feed_url)
+                    break
+                except Exception as e:
+                    if attempt == retries - 1:
+                        print(f"Failed to fetch {feed_url}: {e}")
+                        continue
+                    time.sleep(2)
+            
+            for entry in feed.entries:
+                soup = BeautifulSoup(entry.description, 'html.parser')
+                for img in soup.find_all('img'):
+                    if img.get('src'):
+                        # 清理图片URL，去掉可能的查询参数
+                        img_url = img['src'].split('?')[0]  # 只取URL路径部分
+                        img['src'] = f"/proxy_image?url={img_url}"  # 代理图片请求
+                
+                new_articles.append({
+                    'id': article_id,  # Assign unique ID
+                    'paper': paper_id,
+                    'title': entry.title,
+                    'description': str(soup),
+                    'link': entry.link,
+                    'published': time.strftime('%Y-%m-%d %H:%M:%S', entry.published_parsed),
+                    'content': soup.get_text()
+                })
+                article_id += 1  # Increment article ID
+    
+    articles = sorted(new_articles, key=lambda x: x['published'], reverse=True)
+
+
+# 判断是否登录
+def login_required():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
 
 
 # 初始化 SocketIO
 socketio = SocketIO(app, async_mode='threading')
 online_users = 0
 online_user_ids = set()
+online_users_lock = threading.Lock()
 
 @socketio.on('connect')
 def handle_connect():
     global online_users
     user_id = session.get('user_id')
-    if user_id and user_id not in online_user_ids:
-        online_users += 1
-        online_user_ids.add(user_id)
+    
+    if user_id:
+        with online_users_lock:
+            if user_id not in online_user_ids:
+                online_users += 1
+                online_user_ids.add(user_id)
+                print(f"User {user_id} connected. Total online users: {online_users}")
+    else:
+        print("Anonymous user connected. Not counted in online users.")
+    
+    # 广播在线人数更新
     emit('update_online_users', {'count': online_users}, broadcast=True)
-    print("Client connected")
 
 @socketio.on('disconnect')
 def handle_disconnect():
     global online_users
     user_id = session.get('user_id')
-    if user_id and user_id in online_user_ids:
-        online_users -= 1
-        online_user_ids.remove(user_id)
+    
+    if user_id:
+        with online_users_lock:
+            if user_id in online_user_ids:
+                online_users -= 1
+                online_user_ids.remove(user_id)
+                print(f"User {user_id} disconnected. Total online users: {online_users}")
+    else:
+        print("Anonymous user disconnected.")
+    
+    # 广播在线人数更新
     emit('update_online_users', {'count': online_users}, broadcast=True)
-    print("Client disconnected")
 
 @app.route('/')    # main page
 def home():
@@ -299,9 +415,7 @@ def home():
 
 @app.route('/delete_gv_folder', methods=['POST'])
 def delete_gv_folder():
-    if 'user_id' not in session:
-        flash('You need to log in to post a notification.', 'warning')
-        return redirect(url_for('login'))
+    login_required()
     if 'username' in session and session['username'] == "David Zhang":
         gv_folder = app.config['BILIBILI_FOLDER']
         try:
@@ -373,16 +487,12 @@ def login():
     
 @app.route("/sparkai")   # ai chat page
 def aipage():
-    if 'user_id' not in session:
-        flash('You need to log in to access the dashboard.', 'warning')
-        return redirect(url_for('login'))
+    login_required()
     return render_template('aichat.html')
 
 @app.route('/dashboard')
 def dashboard():
-    if 'user_id' not in session:
-        flash('You need to log in to access the dashboard.', 'warning')
-        return redirect(url_for('login'))
+    login_required()
     
     with sqlite3.connect('app.db') as conn:
         cursor = conn.cursor()
@@ -413,12 +523,7 @@ def logout():
     session.pop('user_id', None)
     session.clear()
     flash('You have been logged out.', 'info')
-    return redirect(url_for('home'))
-
-@app.route('/hit')   #TODO: 制导导弹打击模拟特效页面，需要添加特效 -> 点击长按特效 -> 长安5s后确定打击位置特效 -> 消失
-def hit():
-    return render_template('hit.html')
-    
+    return redirect(url_for('home'))    
 
 @app.route("/get_ai", methods=["GET", "POST"])
 def AiChat():
@@ -432,7 +537,7 @@ def AiChat():
     
     # 获取讯飞API返回的流数据
     spark_response = get_spark_response(user_input)
-    html_response = markdown.markdown(spark_response, extensions=[FencedCodeExtension()])
+    html_response = md(spark_response, extensions=[FencedCodeExtension()])
     return html_response
 
 
@@ -440,19 +545,13 @@ def AiChat():
 def modify_schedule():
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+    
     data = request.get_json()
-    title = data.get('title')
-    content = data.get('content')
-    start_time = data.get('start_time')
-    end_time = data.get('end_time')
-    class_level = data.get('class')
-    print(data)
-
-    # 转换时间格式
     try:
-        start_time = datetime.fromisoformat(start_time.replace('Z', ''))
-        end_time = datetime.fromisoformat(end_time.replace('Z', ''))
-    except ValueError as e:
+        # 保留时区信息并转换为UTC时间
+        start_time = datetime.fromisoformat(data['start_time'].replace('Z', '+00:00')).astimezone(timezone.utc)
+        end_time = datetime.fromisoformat(data['end_time'].replace('Z', '+00:00')).astimezone(timezone.utc)
+    except (KeyError, ValueError) as e:
         return jsonify({'success': False, 'message': f'Invalid time format: {str(e)}'}), 400
 
     try:
@@ -461,13 +560,19 @@ def modify_schedule():
             cursor.execute('''
                 INSERT INTO schedule (user_id, title, content, start_time, end_time, class)
                 VALUES (?, ?, ?, ?, ?, ?)
-            ''', (session['user_id'], title, content, start_time.strftime('%Y-%m-%d %H:%M:%S'), 
-                 end_time.strftime('%Y-%m-%d %H:%M:%S'), class_level))
+            ''', (
+                session['user_id'],
+                data.get('title'),
+                data.get('content'),
+                start_time.strftime('%Y-%m-%d %H:%M:%S'),
+                end_time.strftime('%Y-%m-%d %H:%M:%S'),
+                data.get('class')
+            ))
             conn.commit()
             return jsonify({
                 'success': True,
                 'message': 'Schedule added successfully',
-                'schedule_id': cursor.lastrowid  # 返回新创建的日程ID
+                'schedule_id': cursor.lastrowid
             }), 200
     except sqlite3.Error as e:
         return jsonify({'success': False, 'message': str(e)}), 500
@@ -478,17 +583,11 @@ def update_schedule():
         return jsonify({'success': False, 'message': 'Unauthorized'}), 401
 
     data = request.get_json()
-    task_id = data.get('id')
-    title = data.get('title')
-    content = data.get('content')
-    start_time = data.get('start_time')
-    end_time = data.get('end_time')
-    class_level = data.get('class')
-
     try:
-        start_time = datetime.fromisoformat(start_time.replace('Z', ''))
-        end_time = datetime.fromisoformat(end_time.replace('Z', ''))
-    except ValueError as e:
+        # 统一处理时区转换
+        start_time = datetime.fromisoformat(data['start_time'].replace('Z', '+00:00')).astimezone(timezone.utc)
+        end_time = datetime.fromisoformat(data['end_time'].replace('Z', '+00:00')).astimezone(timezone.utc)
+    except (KeyError, ValueError) as e:
         return jsonify({'success': False, 'message': f'Invalid time format: {str(e)}'}), 400
 
     try:
@@ -500,20 +599,31 @@ def update_schedule():
                 class = ?
                 WHERE id = ? AND user_id = ?
             ''', (
-                title, content, start_time.strftime('%Y-%m-%d %H:%M:%S'), 
-                end_time.strftime('%Y-%m-%d %H:%M:%S'), class_level,
-                task_id, session['user_id']
+                data.get('title'),
+                data.get('content'),
+                start_time.strftime('%Y-%m-%d %H:%M:%S'),
+                end_time.strftime('%Y-%m-%d %H:%M:%S'),
+                data.get('class'),
+                data.get('id'),
+                session['user_id']
             ))
             conn.commit()
 
-            # 返回更新后的日程数据
-            cursor.execute('SELECT * FROM schedule WHERE id = ?', (task_id,))
+            # 返回UTC时间并带Z后缀
+            cursor.execute('SELECT * FROM schedule WHERE id = ?', (data.get('id'),))
             updated_task = cursor.fetchone()
             if updated_task:
                 return jsonify({
                     'success': True,
                     'message': 'Schedule updated successfully',
-                    'task': updated_task
+                    'task': {
+                        'id': updated_task[0],
+                        'title': updated_task[2],
+                        'content': updated_task[3],
+                        'start_time': f"{updated_task[4]}Z",  # 添加UTC标识
+                        'end_time': f"{updated_task[5]}Z",
+                        'class': updated_task[6]
+                    }
                 }), 200
             else:
                 return jsonify({'success': False, 'message': 'Task not found'}), 404
@@ -525,31 +635,36 @@ def get_schedule():
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
 
-    start_time = request.args.get('start')
-    end_time = request.args.get('end')
+    try:
+        # 将查询参数转换为UTC时间
+        start_utc = datetime.fromisoformat(request.args['start'].replace('Z', '+00:00')).astimezone(timezone.utc)
+        end_utc = datetime.fromisoformat(request.args['end'].replace('Z', '+00:00')).astimezone(timezone.utc)
+    except (KeyError, ValueError) as e:
+        return jsonify({'error': f'Invalid time format: {str(e)}'}), 400
 
     try:
         with sqlite3.connect('app.db') as conn:
+            conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute('''
-                SELECT * FROM schedule 
+                SELECT *, 
+                strftime('%Y-%m-%dT%H:%M:%SZ', start_time) as iso_start,
+                strftime('%Y-%m-%dT%H:%M:%SZ', end_time) as iso_end
+                FROM schedule 
                 WHERE user_id = ? AND start_time >= ? AND end_time <= ?
-            ''', (session['user_id'], start_time, end_time))
-            schedule = cursor.fetchall()
+            ''', (
+                session['user_id'],
+                start_utc.strftime('%Y-%m-%d %H:%M:%S'),
+                end_utc.strftime('%Y-%m-%d %H:%M:%S')
+            ))
+            schedule = [dict(row) for row in cursor.fetchall()]
 
-            if not schedule:
-                return jsonify({'schedule': []}), 200
-
-            # 添加星期几信息
-            updated_schedule = []
+            # 添加星期几信息（基于UTC时间）
             for task in schedule:
-                date_str = task[4]  # start_time 是第5列
-                date_obj = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
-                day_of_week = date_obj.strftime("%A")
-                updated_task = task + (day_of_week,)
-                updated_schedule.append(updated_task)
+                date_obj = datetime.strptime(task['start_time'], '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+                task['day_of_week'] = date_obj.strftime("%A")
 
-            return jsonify({'schedule': updated_schedule}), 200
+            return jsonify({'schedule': schedule}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -560,9 +675,13 @@ def get_single_schedule(task_id):
 
     try:
         with sqlite3.connect('app.db') as conn:
+            conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute('''
-                SELECT * FROM schedule 
+                SELECT *, 
+                strftime('%Y-%m-%dT%H:%M:%SZ', start_time) as iso_start,
+                strftime('%Y-%m-%dT%H:%M:%SZ', end_time) as iso_end
+                FROM schedule 
                 WHERE id = ? AND user_id = ?
             ''', (task_id, session['user_id']))
             task = cursor.fetchone()
@@ -570,17 +689,9 @@ def get_single_schedule(task_id):
             if not task:
                 return jsonify({'error': 'Schedule not found'}), 404
 
-            return jsonify({
-                'id': task[0],
-                'title': task[2],
-                'content': task[3],
-                'start_time': task[4].replace(' ', 'T'),  # 转换为前端需要的格式
-                'end_time': task[5].replace(' ', 'T'),
-                'class': task[6]
-            }), 200
+            return jsonify(dict(task)), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/delete_schedule/<int:task_id>', methods=['DELETE'])
 def delete_schedule(task_id):
@@ -600,31 +711,6 @@ def delete_schedule(task_id):
     except sqlite3.Error as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
-@app.route('/update_schedule', methods=['PUT'])
-def update_schedule_put():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Unauthorized'}), 401
-
-    task_id = request.form.get('id')
-    title = request.form.get('title')
-    content = request.form.get('content')
-    start_time = request.form.get('start_time')
-    end_time = request.form.get('end_time')
-    class_level = request.form.get('class')
-
-    try:
-        with sqlite3.connect('app.db') as conn:
-            cursor = conn.cursor()
-            cursor.execute('''UPDATE schedule SET
-                title = ?, content = ?, start_time = ?, end_time = ?,
-                class = ? WHERE id = ? AND user_id = ?''',
-                (title, content, start_time, end_time, class_level,
-                 task_id, session['user_id']))
-            conn.commit()
-            return jsonify({'success': True})
-    except sqlite3.Error as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-
 
 @app.route('/random_bv', methods=['GET'])
 def random_bv():
@@ -637,11 +723,27 @@ def random_bv():
 @app.route('/shutdown', methods=['POST'])
 def shutdown():
     if 'username' in session and session['username'] == "David Zhang":
-        func = request.environ.get('werkzeug.server.shutdown')
-        if func is None:
-            raise RuntimeError('Not running with the Werkzeug Server')
-        func()
-        return jsonify({'status': 'success', 'message': 'Server shutting down...'})
+        # 创建一个线程来关闭服务器
+        def shutdown_server():
+            print("Shutting down the server...")
+            # 发送 SIGTERM 信号给当前进程以关闭服务器
+            os.kill(os.getpid(), signal.SIGTERM)
+            print("Server terminated.")
+
+        # 创建一个线程来执行 poweroff 命令
+        def poweroff_host():
+            time.sleep(3)  # 等待3秒，确保服务器关闭逻辑完成
+            print("Powering off the host...")
+            os.system("poweroff")
+
+        # 启动线程
+        shutdown_thread = threading.Thread(target=shutdown_server)
+        poweroff_thread = threading.Thread(target=poweroff_host)
+
+        shutdown_thread.start()
+        poweroff_thread.start()
+
+        return jsonify({'status': 'success', 'message': 'Server shutting down and host powering off...'})
     else:
         return jsonify({'status': 'error', 'message': 'Unauthorized access'}), 403
 
@@ -649,13 +751,24 @@ def shutdown():
 @app.route('/restart', methods=['POST'])
 def restart():
     if 'username' in session and session['username'] == "David Zhang":
-        func = request.environ.get('werkzeug.server.shutdown')
-        if func is None:
-            raise RuntimeError('Not running with the Werkzeug Server')
-        func()
-        # 启动新的进程来重新启动服务器
-        subprocess.Popen(["python", "server.py"])
-        return jsonify({'status': 'success', 'message': 'Server restarting...'})
+        # 创建一个线程来重启服务器
+        def restart_server():
+            print("Restarting the server...")
+            os.kill(os.getpid(), signal.SIGTERM)  # 发送 SIGTERM 信号关闭服务器
+            print("Server terminated. Restarting...")
+
+        # 创建一个线程来重启主机
+        def reboot_host():
+            time.sleep(3)  # 等待3秒，确保服务器关闭逻辑完成
+            os.system("reboot")
+        # 启动线程
+        restart_thread = threading.Thread(target=restart_server)
+        reboot_thread = threading.Thread(target=reboot_host)
+
+        restart_thread.start()
+        reboot_thread.start()
+
+        return jsonify({'status': 'success', 'message': 'Server restarting and host rebooting...'})
     else:
         return jsonify({'status': 'error', 'message': 'Unauthorized access'}), 403
 
@@ -690,6 +803,8 @@ def search_videos():
                 'title': video['title'],
                 'duration': video['duration'],
                 'author': video['author'],
+                'pic': "/proxy_image?url=https:"+video['pic'],
+                'description': video['description'],
                 'is_series': False,
                 'sub_videos': []
             }
@@ -708,9 +823,7 @@ def search_videos():
 
 @app.route('/bkend', methods=['GET', 'POST'])
 def bkend():
-    if 'user_id' not in session:
-        flash('You need to log in to post a notification.', 'warning')
-        return redirect(url_for('login'))
+    login_required()
     if 'username' in session and session['username'] == "David Zhang":
         if request.method == 'POST':
             title = request.form['title']
@@ -731,9 +844,7 @@ def bkend():
 #profile page
 @app.route('/settings/profile')
 def profile():
-    if 'user_id' not in session:
-        flash('You need to log in to access the dashboard.', 'warning')
-        return redirect(url_for('login'))
+    login_required()
     with sqlite3.connect('app.db') as conn:
         cursor = conn.cursor()
         # 获取用户头像路径
@@ -824,8 +935,7 @@ def update_profile():
 
 @app.route('/user/<int:user_id>')
 def view_profile(user_id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))  # 如果用户未登录，重定向到登录页面
+    login_required()
 
     # 连接数据库
     conn = sqlite3.connect('app.db')
@@ -866,16 +976,29 @@ def view_profile(user_id):
         mavatar_route="/avatar/"+mavatar_route
     )
 
+#  chat settings
+@app.route('/settings/chat')
+def chat_settings():
+    login_required()
+    # 获取用户头像路径
+    conn = sqlite3.connect('app.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT avatar_route FROM users WHERE id = ?', (session['user_id'],))
+    result = cursor.fetchone()
+    if result:
+        avatar_route = result[0]
+    cursor.close()
+    conn.close()
+    return render_template('chatsetting.html', avatar_route="/avatar/"+avatar_route)
+
 @app.route('/chat', methods=['GET'])
 def render_chat():
-    if 'user_id' not in session:
-        flash('You need to log in to access the chat.', 'warning')
-        return redirect(url_for('login'))
+    login_required()
     
     with sqlite3.connect('app.db') as conn:
         cursor = conn.cursor()
-        cursor.execute('SELECT messages.*, files.filename FROM messages LEFT JOIN files ON messages.file_id = files.id ORDER BY time ASC')
-        messages = cursor.fetchall()
+        cursor.execute('SELECT messages.*, files.filename FROM messages LEFT JOIN files ON messages.file_id = files.id ORDER BY time DESC LIMIT 25')
+        messages = cursor.fetchall()[::-1]
     return render_template('chat.html', messages=messages)
 
 
@@ -914,13 +1037,19 @@ def handle_message():
                 (session['user_id'], username, message, chat_time, file_id)
             )
             conn.commit()
-
+        # 获取用户头像路径
+        with sqlite3.connect('app.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT avatar_route FROM users WHERE id = ?', (session['user_id'],))
+            result = cursor.fetchone()
+            avatar_route = result[0] if result else 'noface.jpg'
         # 使用 SocketIO 广播消息
         socketio.emit('new_message', {
             'username': username,
             'message': message,
             'filename': filename,
-            'filepath': url_for('uploaded_file', user=username, filename=filename) if filename else None
+            'filepath': url_for('uploaded_file', user=username, filename=filename) if filename else None,
+            'avatar_route': url_for('avatar_file', avname=avatar_route)
         })
 
         return jsonify({
@@ -935,9 +1064,7 @@ def handle_message():
 
 @app.route('/b_dl')
 def bilibili_dl():
-    if 'user_id' not in session:
-        flash('You need to log in to access the dashboard.', 'warning')
-        return redirect(url_for('login'))
+    login_required()
     with sqlite3.connect('app.db') as conn:
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM notifications ORDER BY time DESC')
@@ -964,13 +1091,13 @@ def bilibili_dl():
                            user_noti_num=user_noti_num)
 
 def convert_video_to_mp4(input_path, output_path):
+        # 使用硬件加速编解码器 h264_v4l2m2m
     command = [
         'ffmpeg',
         '-y',  # 自动覆盖现有文件
         '-i', input_path,
-        '-c:v', 'libx264',  # 使用 H.264 编码
-        '-c:a', 'aac',      # 使用 AAC 音频编码
-        '-strict', 'experimental',
+        '-c:v', 'h264_v4l2m2m',  # 启用硬件加速的 H.264 编码器
+        '-c:a', 'aac',          # 使用 AAC 音频编码
         output_path
     ]
     try:
@@ -1073,6 +1200,165 @@ def uploaded_file(user, filename):
 def avatar_file(avname):
     return send_from_directory(os.path.join(app.config['USERS_SETTING'], 'avatar'), avname)
 
+@app.template_filter('markdown')
+def markdown_filter(content):
+    return md(content, extensions=[FencedCodeExtension()])
+# note part
+@app.route('/notes')
+def notes_index():
+    login_required()
+    with sqlite3.connect('app.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM notifications ORDER BY time DESC')
+        notifications = cursor.fetchall()
+        
+        # 获取用户头像路径
+        cursor.execute('SELECT avatar_route FROM users WHERE id = ?', (session['user_id'],))
+        result = cursor.fetchone()
+        if result:
+            avatar_route = result[0]
+        
+        # 获取通知总数
+        cursor.execute('SELECT COUNT(*) FROM notifications')
+        total_notifications = cursor.fetchone()[0]
+        
+        # 获取用户的未读通知数
+        cursor.execute('SELECT noti_num FROM users WHERE id = ?', (session['user_id'],))
+        user_noti_num = cursor.fetchone()[0]
+        # 只查询当前用户的笔记
+        cursor.execute('''
+            SELECT n.id, n.title, n.content, n.created_at, u.username, n.user_id
+            FROM notes n
+            JOIN users u ON n.user_id = u.id
+            WHERE n.user_id = ?
+        ''', (session['user_id'],))
+        notes = cursor.fetchall()
+        # print(notes)
+    
+    return render_template('notes.html', notes=notes,
+                           notifications=notifications, 
+                           avatar_route="/avatar/"+avatar_route,
+                           total_notifications=total_notifications,
+                           user_noti_num=user_noti_num)
+
+# 查看单个笔记
+@app.route('/notes/<int:id>')
+def view_note(id):
+    login_required()
+    
+    with sqlite3.connect('app.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT n.id, n.title, n.content, n.created_at, n.user_id
+            FROM notes n
+            WHERE n.id = ?
+        ''', (id,))
+        note = cursor.fetchone()
+        if note:
+            # 使用 markdown 将 content 转换为 HTML
+            note_content = md(
+                note[2],
+                extensions=[FencedCodeExtension()]
+            )
+            cursor.execute('SELECT username FROM users WHERE id = ?', (note[4],))
+            user = cursor.fetchone()
+            return render_template(
+                'view_note.html',
+                note_id=note[0],
+                title=note[1],
+                content=note_content,
+                user_id=note[4],
+                created_at=note[3],
+                user=user[0] if user else 'Unknown'
+            )
+    return "Note not found", 404
+
+# 创建笔记
+@app.route('/notes/create', methods=['GET', 'POST'])
+def create_note():
+    login_required()
+    
+    if request.method == 'POST':
+        title = request.form['title']
+        content = request.form['content']
+        user_id = session['user_id']
+        created_at = datetime.now()
+        updated_at = created_at
+        
+        with sqlite3.connect('app.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO notes (user_id, title, content, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (user_id, title, content, created_at, updated_at))
+            conn.commit()
+        return redirect(url_for('notes_index'))
+    
+    return render_template('create_note.html')
+
+@app.route('/notes/<int:id>/edit', methods=['GET', 'POST'])
+def edit_note(id):
+    login_required()
+    
+    with sqlite3.connect('app.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM notes WHERE id = ?', (id,))
+        note = cursor.fetchone()
+    
+    if not note:
+        flash('Note not found', 'danger')
+        return redirect(url_for('notes_index'))
+    
+    # 检查用户是否有权限编辑
+    if note[1] != session['user_id']:
+        flash('Permission denied', 'danger')
+        return redirect(url_for('view_note', id=id))
+    
+    if request.method == 'POST':
+        title = request.form['title']
+        content = request.form['content']
+        updated_at = datetime.now()
+        
+        with sqlite3.connect('app.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE notes
+                SET title = ?, content = ?, updated_at = ?
+                WHERE id = ?
+            ''', (title, content, updated_at, id))
+            conn.commit()
+        
+        flash('Note updated successfully', 'success')
+        return redirect(url_for('view_note', id=id))
+    # print(note[0],note[1],note[3])
+    
+    return render_template(
+        'edit_note.html',
+        note_id=note[0],
+        title=note[2],
+        content=note[3]
+    )
+
+# 删除笔记
+@app.route('/notes/<int:id>/delete', methods=['GET'])
+def delete_note(id):
+    login_required()
+    
+    with sqlite3.connect('app.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT user_id FROM notes WHERE id = ?', (id,))
+        note = cursor.fetchone()
+        if not note:
+            return "Note not found", 404
+        
+        # 检查用户是否有权限删除
+        if note[0] != session['user_id']:
+            return "Permission denied", 403
+        
+        cursor.execute('DELETE FROM notes WHERE id = ?', (id,))
+        conn.commit()
+    return redirect(url_for('notes_index'))
+
 # QS part
 # QS主页面
 @app.route('/qs')
@@ -1084,8 +1370,7 @@ def index():
 # 创建问卷路由
 @app.route('/create', methods=['GET'])
 def create_survey():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
+    login_required()
     
     if request.method == 'POST':
         # 处理问卷创建逻辑
@@ -1169,9 +1454,7 @@ def take_survey(survey_id):
 @app.route('/create', methods=['POST'])
 def handle_create():
     print("进入handle_create路由")
-    if 'user_id' not in session:
-        flash('请先登录', 'error')
-        return redirect(url_for('login'))
+    login_required()
 
     try:
         db = get_qsdb()
@@ -1269,8 +1552,7 @@ def handle_create():
 
 @app.route('/manage/<int:survey_id>')
 def manage_detail(survey_id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
+    login_required()
     
     db = get_qsdb()
     
@@ -1363,8 +1645,7 @@ def manage_detail(survey_id):
 # 管理后台
 @app.route('/manage')
 def manage():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
+    login_required()
     
     db = get_qsdb()
     surveys = db.execute('''
@@ -1377,7 +1658,123 @@ def manage():
     
     return render_template('manage.html', surveys=surveys)
 
+@app.route('/news')
+def news():
+    selected_paper = request.args.get('paper', 'all')
+    filtered_articles = random.sample(articles, min(20, len(articles)))  # 随机显示20条
+    
+    if selected_paper != 'all':
+        filtered_articles = [a for a in articles if a['paper'] == selected_paper][:20]
+    
+    return render_template('news.html',
+                         articles=filtered_articles,
+                         newspapers=newspapers,
+                         selected_paper=selected_paper)
+
+
+@app.route('/article/<int:article_id>')
+def article_detail(article_id):
+    article = next((a for a in articles if a['id'] == article_id), None)
+    if article:
+        return render_template('article.html', article=article)
+    return "Article not found", 404
+
+@app.route('/proxy_image')
+def proxy_image():
+    image_url = request.args.get('url')
+    if not image_url:
+        return "Invalid URL", 400
+    
+    try:
+        response = requests.get(image_url, stream=True)
+        if response.status_code == 200:
+            headers = {
+                'Content-Type': response.headers['Content-Type']
+            }
+            return make_response(
+                response.content,
+                response.status_code,
+                headers
+            )
+        return "Failed to fetch image", 502
+    except Exception as e:
+        return str(e), 500
+    
+# 添加目标
+@app.route('/add_goal', methods=['POST'])
+def add_goal():
+    if 'user_id' not in session:
+        return jsonify({'success': False}), 401
+    
+    data = request.get_json()
+    due_time = None
+    if data.get('due_time'):
+        try:
+            local_time = datetime.fromisoformat(data['due_time'])
+            due_time = local_time.astimezone(timezone.utc).isoformat()
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Invalid time format'}), 400
+
+    try:
+        with sqlite3.connect('app.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('''INSERT INTO goals 
+                (user_id, title, due_time, created_at)
+                VALUES (?, ?, ?, ?)''',
+                (session['user_id'], data['title'], due_time, datetime.utcnow()))
+            conn.commit()
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# 获取目标
+@app.route('/get_goals', methods=['GET'])
+def get_goals():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    try:
+        with sqlite3.connect('app.db') as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('''SELECT *, 
+                strftime('%Y-%m-%dT%H:%M:%SZ', due_time) as iso_due 
+                FROM goals 
+                WHERE user_id = ?
+                ORDER BY 
+                    CASE WHEN due_time IS NULL THEN 1 ELSE 0 END,
+                    due_time ASC''',
+                (session['user_id'],))
+            goals = [dict(row) for row in cursor.fetchall()]
+            return jsonify(goals), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# 删除目标
+@app.route('/delete_goal/<int:goal_id>', methods=['DELETE'])
+def delete_goal(goal_id):
+    if 'user_id' not in session:
+        return jsonify({'success': False}), 401
+    
+    try:
+        with sqlite3.connect('app.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM goals WHERE id = ? AND user_id = ?',
+                         (goal_id, session['user_id']))
+            conn.commit()
+            return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# TODO:社区功能
+    
 if __name__ == '__main__':
+    fetch_feeds()
+    
+    # 创建定时任务（每30分钟更新一次）
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(func=fetch_feeds, trigger="interval", minutes=30)
+    scheduler.start()
     init_folders()
     init_db()
-    socketio.run(app, host='0.0.0.0', debug=True, port=1002)
+    socketio.run(app, host='0.0.0.0', debug=True, port=1002, allow_unsafe_werkzeug=True)

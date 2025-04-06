@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="\static\obs_style.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
+    <script src="{{ url_for('static', filename='js/popup.js') }}" defer></script>
+    <title>Notes</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .user-menu {
+        width: 100%; /* 设置为 100% 或固定宽度 */
+        max-width: 340.8px; /* 限制最大宽度 */
+    }
+        .note {
+            border: 1px solid #eee;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .note_header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .note_header h3 {
+            margin: 0;
+        }
+        .note_content {
+            white-space: pre-wrap;
+        }
+        .create-user {
+            margin-top: 10px;
+            font-size: 0.8em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <a href="/dashboard" style="text-decoration: none; color: inherit;">
+            <div class="header-left">
+                <img src="{{ url_for('static', filename='logo_schoolent.png') }}" alt="Logo">
+                <h1 class="font-tech">Notes</h1>
+            </div>
+        </a>
+        <div class="user-info" id="avatar-img">
+            <div class="notification-icon" id="notification-icon">
+        <img src="{{ url_for('static', filename='font/svg/noti.svg') }}" style="border: none;">
+        {% if total_notifications != user_noti_num %}
+            <span class="notification-dot"></span>
+        {% endif %}
+    </div>
+            <img src="{{ avatar_route }}" alt="头像">
+            <span>{{ session['username'] }}</span>
+        </div>
+        
+    </header>
+    <div class="container">
+        {% for note in notes %}
+            <div class="note">
+                <div class="note_header">
+                    <h3>{{ note[1] }}</h3>
+                    <div>
+                        <a href="{{ url_for('view_note', id=note[0]) }}">View</a>
+                        {% if note[-1] == session['user_id'] %}
+                            <a href="{{ url_for('edit_note', id=note[0]) }}">Edit</a>
+                            <a href="{{ url_for('delete_note', id=note[0]) }}">Delete</a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="note_content">
+                    {{ note[2][0:30]+"..." | markdown | safe }}
+                </div>
+                <div class="create-user">Created by: {{ note[4] }}</div>
+            </div>
+        {% else %}
+            <p>No notes available.</p>
+        {% endfor %}
+    </div>
+    <div class="notification-content" id="notification-content">
+        <h2>通知</h2>
+        <div class="notification-container" id="notification-list">
+            {% for notification in notifications %}
+                <div class="notification">
+                    <div class="notification-title">{{ notification[1] }}</div>
+                    <div class="notification-content-word">{{ notification[2] }}</div>
+                    <div class="notification-timestamp">{{ notification[3] }}</div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="overlay" id="overlay"></div>
+    <div class="user-menu" id="user-menu">
+        <div class="menu-header">
+            <img src="{{ avatar_route }}" alt="头像">
+            <span>{{ session['username'] }}</span>
+        </div>
+        <ul class="menu-items">
+            <li><a href="/dashboard"><i class="iconfont home" style="font-size: 25px;margin-right: 5px;"></i>Home</a></li>
+            <li><a href="/settings/profile"><i class="iconfont profile" style="font-size: 24px;margin-right: 5px;"></i>Profile</a></li>
+            <li><a href="/b_dl"><i class="iconfont tv" style="font-size: 24px;margin-right: 5px;"></i>Study resources download</a></li>
+            <li><a href="/qs"><i class="iconfont icon-send" style="font-size: 24px;margin-right: 5px;"></i>Questionnaire Center</a></li>
+            <li><a href="/logout"><i class="iconfont logout" style="font-size: 24px;margin-right: 5px;"></i>Logout</a></li>
+        </ul>
+    </div>
+    <a href="{{ url_for('create_note') }}" class="floating-action-button" title="Take notes">
+        <img src="{{ url_for('static', filename='font/svg/note.svg') }}" alt="Take notes" style="width: 30px; height: 30px;">
+        <div class="tooltip">Take notes</div>
+    </a>
+</body>
+<script>
+    document.getElementById('notification-icon').addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation(); // 阻止事件冒泡
+        var notificationContent = document.getElementById('notification-content');
+        var overlay = document.getElementById('overlay');
+        notificationContent.classList.toggle('show');
+        overlay.classList.toggle('show');
+
+        // 发送请求更新通知为已读
+        fetch('/mark_notifications_as_read', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // 隐藏红点
+                const notificationDot = document.querySelector('.notification-dot');
+                if (notificationDot) notificationDot.style.display = 'none';
+            } else {
+                alert('Failed to mark notifications as read: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+    });
+
+    // 点击遮罩层隐藏通知内容
+    document.getElementById('overlay').addEventListener('click', function () {
+        var notificationContent = document.getElementById('notification-content');
+        var overlay = document.getElementById('overlay');
+        notificationContent.classList.remove('show');
+        overlay.classList.remove('show');
+    });
+
+    // 处理用户菜单显示/隐藏
+    document.getElementById('avatar-img').addEventListener('click', function (event) {
+        var userMenu = document.getElementById('user-menu');
+        userMenu.classList.toggle('show');
+        event.stopPropagation();
+    });
+
+    // 点击 body 上的其他区域隐藏菜单
+    document.body.addEventListener('click', function (event) {
+        var userMenu = document.getElementById('user-menu');
+        if (!userMenu.contains(event.target) && !document.getElementById('avatar-img').contains(event.target)) {
+            userMenu.classList.remove('show');
+        }
+    });
+
+    // 添加全局点击监听来关闭菜单
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('.task-actions')) {
+            document.querySelectorAll('.action-menu').forEach(menu => {
+                menu.style.display = 'none';
+            });
+        }
+    });
+</script>
+</html>

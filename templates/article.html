@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ article.title }}</title>
+    <style>
+        .article-content { max-width: 800px; margin: 0 auto; }
+        .article-header { margin-bottom: 30px; }
+        .article-body img { max-width: 100%; }
+    </style>
+</head>
+<body>
+    <div class="article-content">
+        <div class="article-header">
+            <h1>{{ article.title }}</h1>
+            <div class="article-meta">{{ article.published }}</div>
+        </div>
+        <div class="article-body">
+            {{ article.description|safe }}
+        </div>
+    </div>
+</body>
+</html>

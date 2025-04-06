@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
     <link rel="stylesheet" href="\static\obs_style.css">
-    <title>Profile</title>
+    <title>Settings-Profile</title>
     <style>
         .profile-header {
             display: flex;
@@ -59,34 +59,9 @@
             font-size: 14px;
             color: #777;
         }
-
-        .profile-info {
-            padding: 20px;
-            background-color: #ffffff;
-            margin: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .profile-info h3 {
-            margin-bottom: 10px;
-            color: #333;
-        }
-
-        .profile-info p {
-            margin: 5px 0;
-            color: #555;
-        }
-
-        .profile-info .password {
-            color: #888;
-            font-style: italic;
-        }
-
         
     /* 编辑表单样式 */
     .edit-form {
-            display: none; /* 默认隐藏编辑表单 */
             margin-top: 20px;
             padding: 20px;
             background-color: #f9f9f9;
@@ -133,6 +108,65 @@
         .edit-button:hover {
             background-color: #0056b3;
         }
+         /* 新增侧边栏样式 */
+         .settings-container {
+            display: flex;
+            margin-top: 20px;
+            height: calc(100vh - 150px); /* 统一容器高度 */
+        }
+
+        .settings-sidebar {
+            width: 180px; /* 固定宽度 */
+            flex-shrink: 0; /* 禁止缩放 */
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-right: 1px solid #dee2e6;
+            overflow-y: auto; /* 添加滚动以防内容溢出 */
+        }
+
+        main {
+            flex: 1; /* 自动填充剩余空间 */
+            min-width: 0; /* 修复flex内容溢出问题 */
+            padding: 0 30px;
+            overflow-y: auto; /* 添加滚动以防内容溢出 */
+        }
+
+        .settings-nav {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .settings-nav li {
+            margin: 8px 0;
+        }
+
+        .settings-nav a {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            color: #495057;
+            text-decoration: none;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .settings-nav a:hover {
+            background-color: #e9ecef;
+            color: #007bff;
+        }
+
+        .settings-nav a.active {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .settings-nav i {
+            font-size: 20px;
+            margin-right: 12px;
+            width: 24px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -140,7 +174,7 @@
         <a href="/dashboard" style="text-decoration: none; color: inherit;">
             <div class="header-left">
                 <img src="{{ url_for('static', filename='logo_schoolent.png') }}" alt="Logo">
-                <h1>Profile</h1>
+                <h1>Settings</h1>
             </div>
         </a>
         <div class="user-info" id="avatar-img">
@@ -161,6 +195,32 @@
             <li><a href="/logout"><i class="iconfont logout" style="font-size: 24px;margin-right: 5px;"></i>Logout</a></li>
         </ul>
     </div>
+    <div class="settings-container">
+        <!-- 左侧导航栏 -->
+        <nav class="settings-sidebar">
+            <ul class="settings-nav">
+                <li>
+                    <a href="/settings/profile" class="active">
+                        Profile
+                    </a>
+                </li>
+                <li>
+                    <a href="/settings/chat">
+                        Chat
+                    </a>
+                </li>
+                <li>
+                    <a href="/settings/privacy">
+                        Privacy
+                    </a>
+                </li>
+                <li>
+                    <a href="/settings/appearance">
+                        Appearance
+                    </a>
+                </li>
+            </ul>
+        </nav>
     <main>
         <div class="profile-header">
             <img src="{{ avatar_route }}" alt="头像" class="profile-avatar" id="profile-avatar">
@@ -169,19 +229,6 @@
                 <p>{{ bio if bio else 'No bio available' }}</p>
             </div>
         </div>
-        <div class="profile-info">
-            <h3>User Information</h3>
-            <p><strong>Bio:</strong> {{ bio if bio else 'None' }}</p>
-            <p><strong>Sex:</strong> {{ sex if sex else 'None' }}</p>
-            <p><strong>Birthday:</strong> {{ birthday if birthday else 'None' }}</p>
-            <p><strong>Email:</strong> {{ email if email else 'None' }}</p>
-            <p><strong>Classroom:</strong> {{ classroom if classroom else 'None' }}</p>
-            <p class="password"><strong>Password:</strong> ********</p><span style="font-size: x-small;"> We're trying to develop the password reset function</span>
-        </div>
-
-        <!-- 编辑按钮 -->
-        <button class="edit-button" onclick="toggleEditForm()">Edit Profile</button>
-
         <!-- 编辑表单 -->
         <div class="edit-form" id="edit-form">
             <form id="profile-form" method="POST" enctype="multipart/form-data">
@@ -216,17 +263,8 @@
             </form>
         </div>
     </main>
+    </div>
     <script>
-        // 切换编辑表单的显示和隐藏
-        function toggleEditForm() {
-            var editForm = document.getElementById('edit-form');
-            if (editForm.style.display === 'none' || editForm.style.display === '') {
-                editForm.style.display = 'block';
-            } else {
-                editForm.style.display = 'none';
-            }
-        }
-
         // 菜单栏的逻辑保持不变
         document.getElementById('avatar-img').addEventListener('click', function(event) {
             var userMenu = document.getElementById('user-menu');

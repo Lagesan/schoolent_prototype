@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css">
+    <link rel="stylesheet" href="\static\obs_style.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
+    <script src="{{ url_for('static', filename='js/popup.js') }}" defer></script>
+    <!-- 添加MathJax支持 -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <title>Notes</title>
+    <style>
+        :root {
+            --ai-primary: #3b82f6;
+            --ai-primary-dark: #2563eb;
+            --ai-secondary: #f5f7fa;
+            --ai-accent: #6d83ff;
+            --ai-text: #333;
+            --ai-light-text: #666;
+            --ai-border: #e1e4e8;
+            --sidebar-width: 380px;
+            --success-green: #10b981;
+            --success-green-dark: #059669;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            color: var(--ai-text);
+            line-height: 1.6;
+            background-color: #f9fafb;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        /* Back Button Styles */
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--ai-primary);
+            text-decoration: none;
+            margin-bottom: 15px;
+            transition: all 0.2s;
+        }
+
+        .back-btn:hover {
+            color: var(--ai-primary-dark);
+            transform: translateX(-2px);
+        }
+
+        .back-btn i {
+            transition: all 0.2s;
+        }
+
+        .back-btn:hover i {
+            transform: translateX(-3px);
+        }
+
+        /* AI Sidebar Styles */
+        .ai-sidebar {
+            position: fixed;
+            right: 0;
+            top: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: white;
+            padding: 25px;
+            box-shadow: -2px 0 15px rgba(0,0,0,0.08);
+            overflow-y: auto;
+            z-index: 1000;
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-left: 1px solid var(--ai-border);
+        }
+
+        .ai-sidebar.active {
+            transform: translateX(0);
+        }
+
+        .ai-sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--ai-border);
+        }
+
+        .ai-sidebar-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--ai-text);
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Button Styles */
+        .ai-summary-btn {
+            background: linear-gradient(135deg, var(--ai-primary) 0%, var(--ai-primary-dark) 100%);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
+        }
+
+        .ai-summary-btn:hover {
+            opacity: 0.95;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+
+        .icon-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--ai-text);
+            padding: 8px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: var(--ai-secondary);
+        }
+
+        .edit-btn {
+            background: linear-gradient(135deg, var(--success-green) 0%, var(--success-green-dark) 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .edit-btn:hover {
+            opacity: 0.95;
+            transform: translateY(-1px);
+        }
+
+        /* Note Content Styles */
+        .note_header {
+            margin-bottom: 20px;
+        }
+
+        .note_header h2 {
+            margin: 0 0 5px 0;
+            color: var(--ai-text);
+        }
+
+        .note_header span {
+            color: var(--ai-light-text);
+            font-size: 14px;
+        }
+
+        .note_actions {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 25px;
+        }
+
+        .note_content {
+            margin-bottom: 25px;
+            line-height: 1.7;
+        }
+
+        .note-footer {
+            color: var(--ai-light-text);
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .note_content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        /* AI Response Styles */
+        .ai-response {
+            margin-top: 20px;
+            padding: 15px;
+            background: var(--ai-secondary);
+            border-radius: 8px;
+            border-left: 3px solid var(--ai-primary);
+        }
+
+        .ai-prompt {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: var(--ai-secondary);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--ai-light-text);
+        }
+
+        /* Loading Animation */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .ai-loader {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        /* Overlay Styles */
+        .sidebar-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.3);
+            z-index: 999;
+            display: none;
+            backdrop-filter: blur(2px);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .sidebar-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+
+        /* Responsive Styles */
+        @media (max-width: 768px) {
+            .ai-sidebar {
+                width: 90%;
+            }
+            
+            .container {
+                padding: 20px 15px;
+            }
+        }
+
+        /* 数学公式样式 */
+        .math-formula {
+            margin: 15px 0;
+        }
+    </style>
+<body>
+    <header>
+        <a href="/notes" style="text-decoration: none; color: inherit;">
+            <div class="header-left">
+                <img src="{{ url_for('static', filename='logo_schoolent.png') }}" alt="Logo">
+                <h1 class="font-tech">Notes</h1>
+            </div>
+        </a>
+    </header>
+    <!-- Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- AI Sidebar -->
+    <div class="ai-sidebar" id="aiSidebar">
+        <div class="ai-sidebar-header">
+            <h3 class="ai-sidebar-title">
+                <i class="bi bi-robot"></i> AI 笔记助手
+            </h3>
+            <button class="icon-btn close-sidebar" onclick="toggleSidebar(false)">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="ai-summary-card">
+            <button class="ai-summary-btn" onclick="generateSummary()" id="aiSummaryBtn">
+                <i class="bi bi-magic"></i> 生成 AI 摘要
+            </button>
+            <div id="ai-response" class="ai-response" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container">
+        
+        <div class="note_header">
+            <h2>{{ title }}</h2>
+            <span>Created by: {{ user }}</span>
+        </div>
+        
+        <div class="note_actions">
+            {% if session['user_id'] == user_id %}
+                <a href="{{ url_for('edit_note', id=note_id) }}" class="edit-btn">
+                    <img src="{{ url_for('static', filename='font/svg/edit.svg') }}" alt="Edit Icon" style="width: 16px; height: 16px; filter: invert(1);">
+                    <span>编辑</span>
+                </a>
+            {% endif %}
+            <button class="ai-summary-btn" onclick="toggleSidebar(true)">
+                <span>AI 总结</span>
+            </button>
+        </div>
+        
+        <div class="note_content">{{ content | safe }}</div>
+        
+        <div class="note-footer">
+            <i class="bi bi-clock"></i> Created at: {{ created_at }}
+        </div>
+    </div>
+
+    <script>
+        // Sidebar toggle control
+        function toggleSidebar(show) {
+            const sidebar = document.getElementById('aiSidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            
+            if (show) {
+                sidebar.classList.add('active');
+                overlay.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            } else {
+                sidebar.classList.remove('active');
+                overlay.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+        }
+
+        // Close sidebar when clicking overlay
+        document.getElementById('sidebarOverlay').addEventListener('click', () => {
+            toggleSidebar(false);
+        });
+
+        // Generate summary logic
+        async function generateSummary() {
+            const btn = document.getElementById('aiSummaryBtn');
+            const responseDiv = document.getElementById('ai-response');
+            
+            try {
+                btn.innerHTML = `<span class="ai-loader"></span> 正在生成...`;
+                btn.disabled = true;
+                
+                const noteContent = document.querySelector('.note_content').textContent;
+                const prompt = `请用中文总结以下内容：
+${noteContent}
+
+输出要求：
+1. 分3-5个核心要点
+2. 每个要点前加相关Emoji
+3. 保持简洁明了`;
+
+                const response = await fetch('/get_ai', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ q: prompt })
+                });
+
+                if (!response.ok) throw new Error('Network response was not ok');
+
+                const html = await response.text();
+                responseDiv.innerHTML = html;
+                responseDiv.style.display = 'block';
+                
+                // Math rendering
+                if (window.MathJax?.typeset) {
+                    window.MathJax.typeset([responseDiv]);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                responseDiv.innerHTML = `
+                    <div class="ai-error">
+                        <i class="bi bi-exclamation-triangle"></i> 生成失败，请重试
+                    </div>
+                `;
+                responseDiv.style.display = 'block';
+            } finally {
+                btn.innerHTML = `<img src="{{ url_for('static', filename='font/svg/lightning.svg') }}" alt="Lightning Icon" style="width: 16px; height: 16px;"> 重新生成`;
+                btn.disabled = false;
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            // 初始化MathJax
+            if (window.MathJax) {
+                MathJax.startup.promise.then(() => {
+                    console.log('MathJax initialized');
+                    
+                    // 渲染页面中的数学公式
+                    MathJax.typesetPromise([document.querySelector('.note_content')]);
+                });
+            }
+        });
+    </script>
+</body>
+</html>

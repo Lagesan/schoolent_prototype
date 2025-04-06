@@ -153,6 +153,9 @@
     </style>
 </head>
 <body>
+    <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
+     <!-- noti-card -->
+     <div class="notification-center" id="notification-center" draggable="true"></div>
     <header>
         <a href="{{ url_for('dashboard') }}" style="color: inherit; text-decoration: none;">
             <i class="iconfont back" style="font-size: 24px;"></i>
@@ -193,6 +196,140 @@
             <div id="other-videos"></div>
         </section>
     </div>
+    <script>
+        // noti-card
+        const socket = io('http://' + window.location.hostname + ':1002');
+        const notificationCenter = document.getElementById('notification-center');
+        
+        socket.on('new_message', function(data) {
+            // 创建通知卡片
+            const notification = document.createElement('div');
+            notification.className = 'notification-card';
+            
+            // 处理文件显示
+            const messageContent = data.filename ? 
+                `${data.message || ''} <span class="file-indicator">[文件]</span>` : 
+                (data.message || '');
+            
+            notification.innerHTML = `
+                <img src="${data.avatar_route}" class="notification-avatar" alt="头像">
+                <div class="noticard-content">
+                    <div class="notification-user">${data.username}</div>
+                    <div class="notification-message">${messageContent}</div>
+                    <div class="notification-time">${new Date().toLocaleTimeString()}</div>
+                </div>
+            `;
+
+            // 点击跳转到聊天页面
+            notification.addEventListener('click', () => {
+                window.location.href = '/chat';
+            });
+
+            // 移除之前的通知卡片
+            while (notificationCenter.firstChild) {
+                notificationCenter.removeChild(notificationCenter.firstChild);
+            }
+
+            // 添加新的通知卡片
+            notificationCenter.appendChild(notification);
+
+            const notificationCards = document.querySelectorAll('.notification-card');
+
+            notificationCards.forEach(card => {
+                let isDragging = false;
+                let startY = 0;
+                let initialY = 0;
+                let currentY = 0;
+                let cardInitialTop = 0;
+
+                // 开始拖动（鼠标按下或触摸开始）
+                card.addEventListener('mousedown', startDrag);
+                card.addEventListener('touchstart', startDrag);
+
+                function startDrag(e) {
+                    isDragging = true;
+                    
+                    // 获取初始位置
+                    if (e.type === 'mousedown') {
+                        startY = e.clientY;
+                    } else if (e.type === 'touchstart') {
+                        startY = e.touches[0].clientY;
+                    }
+
+                    initialY = card.offsetTop;
+                    cardInitialTop = parseFloat(getComputedStyle(card).transform.replace(/[^0-9.-]+/g, "")) || 0;
+                    card.classList.add('dragging');
+                }
+
+                // 拖动中（鼠标移动或触摸移动）
+                document.addEventListener('mousemove', moveDrag);
+                document.addEventListener('touchmove', moveDrag);
+
+                function moveDrag(e) {
+                    if (!isDragging) return;
+
+                    let currentYPos;
+                    if (e.type === 'mousemove') {
+                        currentYPos = e.clientY;
+                    } else if (e.type === 'touchmove') {
+                        currentYPos = e.touches[0].clientY;
+                    }
+
+                    const diffY = currentYPos - startY;
+                    currentY = cardInitialTop + diffY;
+
+                    // 限制拖动范围（允许向下拖动最多卡片高度的 50%）
+                    const maxDragDown = card.offsetHeight * 0.5;
+                    currentY = Math.max(-maxDragDown, Math.min(maxDragDown, currentY));
+
+                    card.style.transform = `translateY(${currentY}px)`;
+                }
+
+                // 停止拖动（鼠标松开或触摸结束）
+                document.addEventListener('mouseup', endDrag);
+                document.addEventListener('touchend', endDrag);
+
+                function endDrag() {
+                    if (!isDragging) return;
+                    isDragging = false;
+                    card.classList.remove('dragging');
+
+                    // 如果拖动距离超过卡片高度的 30%，则关闭卡片
+                    const dragThreshold = card.offsetHeight * 0.3;
+                    if (Math.abs(currentY) > dragThreshold) {
+                        card.classList.add('exit');
+                        setTimeout(() => {
+                            card.remove();
+                        }, 500); // 等待动画结束
+                    } else {
+                        // 添加回弹动画
+                        card.style.transition = 'transform 0.3s ease-out';
+                        card.style.transform = 'translateY(0)';
+                        setTimeout(() => {
+                            card.style.transition = '';
+                        }, 300);
+                    }
+                }
+            });
+
+            // 确保点击事件能够触发
+            document.querySelectorAll('.notification-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    // 确保拖动结束后才允许点击跳转
+                    if (!card.classList.contains('dragging')) {
+                        window.location.href = '/chat';
+                    }
+                });
+            });
+
+            setTimeout(() => {
+                notification.classList.add('exit');
+                notification.addEventListener('animationend', () => {
+                    notification.remove();
+                }, { once: true });
+            }, 4000);
+    });
+    </script>
     <script>
         document.getElementById('download-form').addEventListener('submit', function(event) {
             event.preventDefault();
@@ -239,9 +376,11 @@
                             let html = `
                                 <div class="video-card">
                                     <h4>BV号: ${video.bv_id}</h4>
+                                    <img src="${video.pic}" alt="Cover" style="width: 80%;">
                                     <p>标题: ${video.title}</p>
                                     <p>时长: ${formatDuration(video.duration)}</p>
                                     <p>UP主: ${video.author}</p>
+                                    <p style="font-size: 12px;">简介: ${video.description}</p>
                                     ${video.is_series ? `
                                         <div class="series-info">
                                             <h5>该视频是合集</h5>

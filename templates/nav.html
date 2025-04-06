@@ -1,0 +1,15 @@
+<!-- 导航栏组件 -->
+<nav class="paper-nav">
+    <div class="nav-container">
+        <a href="/news?paper=all" class="nav-item {% if selected_paper == 'all' %}active{% endif %}">
+            <span class="nav-icon">🤓</span>
+            <span class="nav-text">全部热点</span>
+        </a>
+        {% for paper_id, paper in newspapers.items() %}
+        <a href="/news?paper={{ paper_id }}" class="nav-item {% if selected_paper == paper_id %}active{% endif %}">
+            <img src="/proxy_image?url={{ paper.icon }}" class="nav-icon">
+            <span class="nav-text">{{ paper.name }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</nav>

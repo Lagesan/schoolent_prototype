@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>热点新闻</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='obs_style.css') }}">
+    <style>
+        :root {
+            --primary-color: #2196F3;
+            --hover-color: #1976D2;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+        }
+
+        /* 导航栏样式 */
+        .paper-nav {
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-container {
+            display: flex;
+            gap: 1.5rem;
+            overflow-x: auto;
+            padding-bottom: 0.5rem;
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 80px;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #666;
+            transition: all 0.2s;
+        }
+
+        .nav-item:hover {
+            background: #f0f0f0;
+            transform: translateY(-2px);
+        }
+
+        .nav-item.active {
+            color: var(--primary-color);
+            background: rgba(33, 150, 243, 0.1);
+        }
+
+        .nav-icon {
+            width: 32px;
+            height: 32px;
+            object-fit: contain;
+            margin-bottom: 0.5rem;
+        }
+
+        /* 文章列表样式 */
+        .article-list {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        .article-grid {
+            display: grid;
+            gap: 2rem;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        }
+
+        .article-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+
+        .article-card:hover {
+            transform: translateY(-4px);
+        }
+
+        .card-content {
+            padding: 1.5rem;
+        }
+
+        .article-title {
+            font-size: 1.1rem;
+            margin: 0 0 0.5rem;
+            color: #333;
+        }
+
+        .article-meta {
+            font-size: 0.8rem;
+            color: #666;
+            margin-bottom: 1rem;
+        }
+
+        .article-summary {
+            font-size: 0.9rem;
+            color: #444;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 768px) {
+            .nav-container {
+                gap: 1rem;
+                padding: 0 1rem;
+            }
+            
+            .nav-item {
+                min-width: 70px;
+                padding: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    {% include "nav.html" %}
+    <div class="article-grid">
+        {% for article in articles %}
+        <a href="/article/{{ article.id }}" class="article-card">
+            <div class="card-content">
+                <h2 class="article-title">{{ article.title }}</h2>
+                <div class="article-meta">
+                    <span>{{ article.published }}</span>
+                    <span style="margin: 0 5px">•</span>
+                    <span>{{ newspapers[article.paper].name }}</span>
+                </div>
+                <p class="article-summary">{{ article.content|truncate(100) }}</p>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</body>
+</html>

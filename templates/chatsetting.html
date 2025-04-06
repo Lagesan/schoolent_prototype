@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='font/font.css') }}">
+    <link rel="stylesheet" href="\static\obs_style.css">
+    <title>Settings-Chat</title>
+    <style>
+         /* 侧边栏样式 */
+         .settings-container {
+            display: flex;
+            margin-top: 20px;
+            height: calc(100vh - 150px); /* 统一容器高度 */
+        }
+
+        .settings-sidebar {
+            width: 180px; /* 固定宽度 */
+            flex-shrink: 0; /* 禁止缩放 */
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-right: 1px solid #dee2e6;
+            overflow-y: auto; /* 添加滚动以防内容溢出 */
+        }
+
+        main {
+            flex: 1; /* 自动填充剩余空间 */
+            min-width: 0; /* 修复flex内容溢出问题 */
+            padding: 0 30px;
+            overflow-y: auto; /* 添加滚动以防内容溢出 */
+        }
+
+        .settings-nav {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .settings-nav li {
+            margin: 8px 0;
+        }
+
+        .settings-nav a {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            color: #495057;
+            text-decoration: none;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .settings-nav a:hover {
+            background-color: #e9ecef;
+            color: #007bff;
+        }
+
+        .settings-nav a.active {
+            background-color: #007bff;
+            color: white;
+        }
+
+    </style>
+</head>
+<body>
+    <header>
+        <a href="/dashboard" style="text-decoration: none; color: inherit;">
+            <div class="header-left">
+                <img src="{{ url_for('static', filename='logo_schoolent.png') }}" alt="Logo">
+                <h1>Settings</h1>
+            </div>
+        </a>
+        <div class="user-info" id="avatar-img">
+            <img src="{{ avatar_route }}" alt="头像">
+            <span>{{ session['username'] }}</span>
+        </div>
+    </header>
+    <div class="user-menu" id="user-menu">
+        <div class="menu-header">
+            <img src="{{ avatar_route }}" alt="头像">
+            <span>{{ session['username'] }}</span>
+        </div>
+        <ul class="menu-items">
+            <li><a href="/dashboard"><i class="iconfont home" style="font-size: 25px;margin-right: 5px;"></i>Home</a></li>
+            <li><a href="/settings/profile"><i class="iconfont profile" style="font-size: 24px;margin-right: 5px;"></i>Profile</a></li>
+            <li><a href="/b_dl"><i class="iconfont tv" style="font-size: 24px;margin-right: 5px;"></i>Study resources download</a></li>
+            <li><a href="/qs"><i class="iconfont icon-send" style="font-size: 24px;margin-right: 5px;"></i>Questionnaire Center</a></li>
+            <li><a href="/logout"><i class="iconfont logout" style="font-size: 24px;margin-right: 5px;"></i>Logout</a></li>
+        </ul>
+    </div>
+    <div class="settings-container">
+        <!-- 左侧导航栏 -->
+        <nav class="settings-sidebar">
+            <ul class="settings-nav">
+                <li>
+                    <a href="/settings/profile">
+                        Profile
+                    </a>
+                </li>
+                <li>
+                    <a href="/settings/chat"  class="active">
+                        Chat
+                    </a>
+                </li>
+                <li>
+                    <a href="/settings/privacy">
+                        Privacy
+                    </a>
+                </li>
+                <li>
+                    <a href="/settings/appearance">
+                        Appearance
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    <main>
+        <div class="msgbox">
+        </div>
+    </main>
+    </div>
+    <script>
+        // 菜单栏的逻辑保持不变
+        document.getElementById('avatar-img').addEventListener('click', function(event) {
+            var userMenu = document.getElementById('user-menu');
+            userMenu.classList.toggle('show');
+            event.stopPropagation();
+        });
+
+        document.body.addEventListener('click', function(event) {
+            var userMenu = document.getElementById('user-menu');
+            if (!userMenu.contains(event.target) && !document.getElementById('avatar-img').contains(event.target)) {
+                userMenu.classList.remove('show');
+            }
+        });
+    </script>
+</body>
+</html>

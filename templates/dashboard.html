@@ -10,6 +10,11 @@
     <style>
         main {
             padding: 20px;
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+            max-width: 1400px;
+            margin: 0 auto;
         }
         .notification-dot {
             display: inline-block;
@@ -27,14 +32,16 @@
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             padding: 20px;
-            max-width: 1200px;
-            margin: 20px auto;
+            flex: 1; /* 让两个容器平分宽度 */
+            min-width: 0; /* 防止内容溢出 */
         }
         .schedule-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
+            padding: 10px 0; /* 增加内边距 */
+            border-bottom: 1px solid #eee; /* 添加分割线 */
         }
         .schedule-header h2 {
             margin: 0;
@@ -86,9 +93,12 @@
             background-color: #fff3e0;
             border-left-color: #ffb74d;
         }
-        .task-goal {
-            border-left-color: #80ff37;
-            background-color: #e1febe;
+        .task-time {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 8px;
+            padding-top: 4px;
+            border-top: 1px solid #eee;
         }
         .day {
             background-color: #f9f9f9;
@@ -97,6 +107,12 @@
             padding: 15px;
             width: 18%;
             transition: transform 0.2s ease;
+        }
+        .day .empty-message {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            color: #6c757d;
         }
         .day:hover {
             transform: translateY(-5px);
@@ -107,54 +123,7 @@
             color: #444;
             text-align: center;
         }
-        .empty-message {
-            text-align: center;
-            color: #888;
-            font-size: 1.2em;
-            margin-top: 20px;
-        }
-        .notification-icon {
-            margin-right: 15px;
-            margin-top: 5px;
-            cursor: pointer;
-            color: #444;
-            text-decoration: none;
-        }
-        .notification-icon img {
-            width: 25px;
-            height: 25px;
-        }
-        .notification-content {
-            visibility: hidden;
-            position: fixed;
-            top: 0;
-            right: -500px;
-            width: 400px;
-            height: 100%;
-            background-color: #fff;
-            box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
-            transition: right 0.3s ease;
-            padding: 20px;
-            z-index: 1002;
-            overflow-y: auto;
-        }
-        .notification-content.show {
-            visibility: visible;
-            right: 0;
-        }
-        .overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            z-index: 999;
-        }
-        .overlay.show {
-            display: block;
-        }
+        
         .effect-button {
             cursor: pointer;
             transition: transform 0.3s ease;
@@ -309,9 +278,98 @@
         .add-schedule-form button[type="submit"]:hover {
             background: linear-gradient(to right, #0056b3, #003d82);
         }
+        /* Goals样式 */
+        .goals-list {
+            padding: 10px;
+        }
+
+        .goal-item {
+            background: #fff;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .goal-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .goal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .goal-time {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 8px;
+        }
+
+        .due-status {
+            font-size: 0.8em;
+            padding: 4px 8px;
+            border-radius: 12px;
+            background: #f0f0f0;
+        }
+
+        .due-status.urgent {
+            background: #ffeeba;
+        }
+
+        .due-status.overdue {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .delete-goal {
+            cursor: pointer;
+            color: #dc3545;
+            padding: 4px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .delete-goal:hover {
+            background: rgba(220,53,69,0.1);
+        }
+
+        @media (max-width: 1200px) {
+            main {
+                flex-direction: column;
+            }
+
+            .schedule-container, .goals-container {
+                width: 100%;
+                flex: 1 1 auto;
+            }
+
+            .goals-container {
+                max-height: 400px; /* 移动端限制高度 */
+            }
+        }
+
+        /* 优化操作按钮布局 */
+        .goal-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .goals-container {
+            flex: 0 0 380px;
+            max-height: 800px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
+    <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
+    <!-- noti-card -->
+    <div class="notification-center" id="notification-center" draggable="true"></div>
     <div class="effect-sidebar" id="effect-sidebar"></div>
     <div class="content-wrapper">
         <header>
@@ -338,9 +396,17 @@
             {% if 'username' in session and session['username'] == "David Zhang" %}
             <a href="/bkend">Backend</a>
             {% endif %}
+            <a href="/notes">Notes</a>
+            <a href="/news">News</a>
+            <a href="/community">Community</a>
         </nav>
+        <!-- 新增悬浮按钮 -->
+        <a href="{{ url_for('create_note') }}" class="floating-action-button" title="Take notes">
+            <img src="{{ url_for('static', filename='font/svg/note.svg') }}" alt="Take notes" style="width: 30px; height: 30px;">
+            <div class="tooltip">Take notes</div>
+        </a>
         <main>
-            <div class="schedule-container">
+                <div class="schedule-container" style="flex: 3;">
                 <div class="schedule-header">
                     <h2>XXXX年XX月XX日 - XXXX年XX月XX日</h2>
                     <div class="effect-button" id="effect-btn">
@@ -355,6 +421,41 @@
                     <div class="empty-message">Loading...</div>
                 </div>
             </div>
+            <div class="schedule-container goals-container">
+                <div class="schedule-header">
+                    <h2>目标</h2>
+                    <div class="effect-button" id="add-goal-btn">
+                        <img src="{{ url_for('static', filename='font/svg/add.svg') }}" alt="添加目标">
+                    </div>
+                </div>
+                <div class="goals-list" id="goals-content" style="max-height: 600px; overflow-y: auto;">
+                    <div class="empty-message">Loading...</div>
+                </div>
+            </div>
+        </div>
+    
+        <!-- 新增目标表单（修改为弹出层） -->
+        <div class="overlay" id="goal-overlay" style="display: none;"></div>
+        <div class="add-schedule-form" id="goal-form" 
+             style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1002;">
+            <h2>新增目标</h2>
+            <form id="add-goal-form-submit">
+                <div class="form-group">
+                    <label for="goal-title">标题</label>
+                    <input type="text" id="goal-title" name="title" required>
+                </div>
+                <div class="form-group">
+                    <label for="due-time">截止时间（可选）</label>
+                    <input type="datetime-local" id="due-time" name="due_time">
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="button" onclick="closeGoalForm()" 
+                            style="background: #6c757d; flex: 1;">取消</button>
+                    <button type="submit" style="flex: 1;">添加目标</button>
+                    
+                </div>
+            </form>
+        </div>
         </main>
         <div class="add-schedule-form" id="original-form">
             <h2>新增日程</h2>
@@ -382,7 +483,6 @@
                         <option value="1">紧急</option>
                         <option value="2">正式</option>
                         <option value="3">非正式</option>
-                        <option value="4">目标</option>
                     </select>
                 </div>
                 <button type="submit">添加日程</button>
@@ -416,95 +516,256 @@
         </div>
     </div>
     <script>
+        // noti-card
+        const socket = io('http://' + window.location.hostname + ':1002');
+        const notificationCenter = document.getElementById('notification-center');
+        
+        socket.on('new_message', function(data) {
+            // 创建通知卡片
+            const notification = document.createElement('div');
+            notification.className = 'notification-card';
+            
+            // 处理文件显示
+            const messageContent = data.filename ? 
+                `${data.message || ''} <span class="file-indicator">[文件]</span>` : 
+                (data.message || '');
+            
+            notification.innerHTML = `
+                <img src="${data.avatar_route}" class="notification-avatar" alt="头像">
+                <div class="noticard-content">
+                    <div class="notification-user">${data.username}</div>
+                    <div class="notification-message">${messageContent}</div>
+                    <div class="notification-time">${new Date().toLocaleTimeString()}</div>
+                </div>
+            `;
+
+            // 点击跳转到聊天页面
+            notification.addEventListener('click', () => {
+                window.location.href = '/chat';
+            });
+
+            // 移除之前的通知卡片
+            while (notificationCenter.firstChild) {
+                notificationCenter.removeChild(notificationCenter.firstChild);
+            }
+
+            // 添加新的通知卡片
+            notificationCenter.appendChild(notification);
+
+            const notificationCards = document.querySelectorAll('.notification-card');
+
+            notificationCards.forEach(card => {
+                let isDragging = false;
+                let startY = 0;
+                let initialY = 0;
+                let currentY = 0;
+                let cardInitialTop = 0;
+
+                // 开始拖动（鼠标按下或触摸开始）
+                card.addEventListener('mousedown', startDrag);
+                card.addEventListener('touchstart', startDrag);
+
+                function startDrag(e) {
+                    isDragging = true;
+                    
+                    // 获取初始位置
+                    if (e.type === 'mousedown') {
+                        startY = e.clientY;
+                    } else if (e.type === 'touchstart') {
+                        startY = e.touches[0].clientY;
+                    }
+
+                    initialY = card.offsetTop;
+                    cardInitialTop = parseFloat(getComputedStyle(card).transform.replace(/[^0-9.-]+/g, "")) || 0;
+                    card.classList.add('dragging');
+                }
+
+                // 拖动中（鼠标移动或触摸移动）
+                document.addEventListener('mousemove', moveDrag);
+                document.addEventListener('touchmove', moveDrag);
+
+                function moveDrag(e) {
+                    if (!isDragging) return;
+
+                    let currentYPos;
+                    if (e.type === 'mousemove') {
+                        currentYPos = e.clientY;
+                    } else if (e.type === 'touchmove') {
+                        currentYPos = e.touches[0].clientY;
+                    }
+
+                    const diffY = currentYPos - startY;
+                    currentY = cardInitialTop + diffY;
+
+                    // 限制拖动范围（允许向下拖动最多卡片高度的 50%）
+                    const maxDragDown = card.offsetHeight * 0.5;
+                    currentY = Math.max(-maxDragDown, Math.min(maxDragDown, currentY));
+
+                    card.style.transform = `translateY(${currentY}px)`;
+                }
+
+                // 停止拖动（鼠标松开或触摸结束）
+                document.addEventListener('mouseup', endDrag);
+                document.addEventListener('touchend', endDrag);
+
+                function endDrag() {
+                    if (!isDragging) return;
+                    isDragging = false;
+                    card.classList.remove('dragging');
+
+                    // 如果拖动距离超过卡片高度的 30%，则关闭卡片
+                    const dragThreshold = card.offsetHeight * 0.3;
+                    if (Math.abs(currentY) > dragThreshold) {
+                        card.classList.add('exit');
+                        setTimeout(() => {
+                            card.remove();
+                        }, 500); // 等待动画结束
+                    } else {
+                        // 添加回弹动画
+                        card.style.transition = 'transform 0.3s ease-out';
+                        card.style.transform = 'translateY(0)';
+                        setTimeout(() => {
+                            card.style.transition = '';
+                        }, 300);
+                    }
+                }
+            });
+
+            // 确保点击事件能够触发
+            document.querySelectorAll('.notification-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    // 确保拖动结束后才允许点击跳转
+                    if (!card.classList.contains('dragging')) {
+                        window.location.href = '/chat';
+                    }
+                });
+            });
+
+            setTimeout(() => {
+                notification.classList.add('exit');
+                notification.addEventListener('animationend', () => {
+                    notification.remove();
+                }, { once: true });
+            }, 4000);
+    });
+    </script>
+    <script>
     document.addEventListener('DOMContentLoaded', function () {
-    let currentWeekStart = new Date(); // 动态计算周起始
+        let currentWeekStart = getMonday(new Date()); // 始终从周一开始
 
-    // 更新周显示
-    function updateWeekDisplay() {
+        function getMonday(d) {
+        const date = new Date(d);
+        const day = date.getDay(); // 0=周日
+        const diff = date.getDate() - day + (day === 0 ? -6 : 1); // 调整周一计算
+        return new Date(date.setDate(diff));
+        }
+
+        window.prevWeek = function() {
+            currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+            updateWeekDisplay();
+            loadSchedule();
+        };
+
+        window.nextWeek = function() {
+            currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+            updateWeekDisplay();
+            loadSchedule();
+        };
+
+        function updateWeekDisplay() {
         const weekStart = new Date(currentWeekStart);
-        weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); // 周一为起始
         const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6); // 设置结束日期为开始日期的7天后
+        weekEnd.setDate(weekStart.getDate() + 6); // 周一到周日
 
-        const options = { year: 'numeric', month: '2-digit', day: '2-digit' };
-        document.querySelector('.schedule-header h2').textContent =
-            `${weekStart.toLocaleDateString('zh-CN', options)} - ${weekEnd.toLocaleDateString('zh-CN', options)}`;
-    }
+        document.querySelector('.schedule-header h2').textContent = 
+            `${formatDate(weekStart)} - ${formatDate(weekEnd)}`;
+        }
 
-    // 上一周
-    window.prevWeek = function () {
-        currentWeekStart.setDate(currentWeekStart.getDate() - 7);
-        updateWeekDisplay();
-        loadSchedule();
-    };
+        function formatDate(date) {
+        return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        }
 
-    // 下一周
-    window.nextWeek = function () {
-        currentWeekStart.setDate(currentWeekStart.getDate() + 7);
-        updateWeekDisplay();
-        loadSchedule();
-    };
+        function loadSchedule() {
+            const weekStart = new Date(currentWeekStart);
+            weekStart.setUTCHours(0, 0, 0, 0);  // 使用UTC时间
+            const weekEnd = new Date(weekStart);
+            weekEnd.setUTCDate(weekStart.getUTCDate() + 7); // 结束日期为UTC时间的7天后
 
-    // 加载日程
-    function loadSchedule() {
-        const weekStart = new Date(currentWeekStart);
-        weekStart.setHours(0, 0, 0, 0);
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 7); // 结束日期为当前日期的7天后
+            // 使用ISO格式的UTC时间字符串
+            const startParam = weekStart.toISOString();
+            const endParam = weekEnd.toISOString();
 
-        fetch(`/get_schedule?start=${weekStart.toISOString()}&end=${weekEnd.toISOString()}`)
-            .then(response => response.json())
-            .then(data => {
-                const scheduleContainer = document.getElementById('schedule-content');
-                scheduleContainer.innerHTML = '';
+            fetch(`/get_schedule?start=${encodeURIComponent(startParam)}&end=${encodeURIComponent(endParam)}`)
+                .then(response => response.json())
+                .then(data => {
+                    const scheduleContainer = document.getElementById('schedule-content');
+                    scheduleContainer.innerHTML = '';
 
-                if (!data.schedule || data.schedule.length === 0) {
-                    scheduleContainer.innerHTML = '<div class="empty-message">无日程</div>';
-                } else {
-                    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-                    days.forEach(day => {
+                    if (!data.schedule || data.schedule.length === 0) {
+                        scheduleContainer.innerHTML = '<div class="empty-message">无日程</div>';
+                        return;
+                    }
+
+                    // 创建按星期分组的任务字典
+                    const tasksByDay = {
+                        Monday: [], Tuesday: [], Wednesday: [],
+                        Thursday: [], Friday: [], Saturday: [], Sunday: []
+                    };
+
+                    // 转换UTC时间到本地时区并分组
+                    data.schedule.forEach(task => {
+                        // 解析UTC时间并转换为本地时间
+                        const startDate = new Date(task.iso_start);
+                        const localStartStr = startDate.toLocaleString('zh-CN', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+
+                        // 使用后端返回的星期信息
+                        const dayOfWeek = task.day_of_week;
+                        if (tasksByDay[dayOfWeek]) {
+                            tasksByDay[dayOfWeek].push({
+                                ...task,
+                                localStart: localStartStr
+                            });
+                        }
+                    });
+
+                    // 按固定顺序渲染星期
+                    const daysOrder = ['Monday', 'Tuesday', 'Wednesday', 
+                                    'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                    
+                    daysOrder.forEach(day => {
                         const dayElement = document.createElement('div');
                         dayElement.className = 'day';
                         dayElement.innerHTML = `<h3>${day}</h3>`;
-                        scheduleContainer.appendChild(dayElement);
-
-                        const tasksForDay = data.schedule.filter(task => task[7] === day);
-                        if (tasksForDay.length > 0) {
-                            tasksForDay.forEach(task => {
+                        
+                        const tasks = tasksByDay[day];
+                        if (tasks && tasks.length > 0) {
+                            tasks.forEach(task => {
                                 const taskElement = document.createElement('div');
-                                taskElement.className = 'task';
-
-                                const classLevel = task[6];
-                                let taskClass = '';
-                                if (classLevel === '0') {
-                                    taskClass = 'task-personal';
-                                } else if (classLevel === '1') {
-                                    taskClass = 'task-urgent';
-                                } else if (classLevel === '2') {
-                                    taskClass = 'task-formal';
-                                } else if (classLevel === '3') {
-                                    taskClass = 'task-informal';
-                                } else if (classLevel === '4') {
-                                    taskClass = 'task-goal';
-                                }
-
-                                taskElement.classList.add(taskClass);
+                                taskElement.className = `task ${getTaskClass(task.class)}`;
+                                
                                 taskElement.innerHTML = `
                                     <div class="task-header">
-                                        <h4>${task[2]}</h4>
-                                        <div class="task-actions" onclick="showActionMenu(event, ${task[0]})">
+                                        <h4>${task.title}</h4>
+                                        <div class="task-actions" onclick="showActionMenu(event, ${task.id})">
                                             <img src="{{ url_for('static', filename='font/svg/kebab-menu.svg') }}">
-                                            <div class="action-menu" id="menu-${task[0]}">
-                                                <button onclick="handleEditSchedule(${task[0]})">
+                                            <div class="action-menu" id="menu-${task.id}">
+                                                <button onclick="handleEditSchedule(${task.id})">
                                                     <img src="{{ url_for('static', filename='font/svg/edit.svg') }}">编辑
                                                 </button>
-                                                <button onclick="handleDeleteSchedule(${task[0]})">
+                                                <button onclick="handleDeleteSchedule(${task.id})">
                                                     <img src="{{ url_for('static', filename='font/svg/delete.svg') }}">删除
                                                 </button>
                                             </div>
                                         </div>
                                     </div>
-                                    <p>${task[3]}</p>
+                                    <p>${task.content}</p>
+                                    <div class="task-time">${task.localStart}</div>
                                 `;
                                 dayElement.appendChild(taskElement);
                             });
@@ -514,15 +775,27 @@
                             emptyTaskElement.innerText = '无日程';
                             dayElement.appendChild(emptyTaskElement);
                         }
+                        
+                        scheduleContainer.appendChild(dayElement);
                     });
-                }
-            })
-            .catch(error => {
-                console.error('Error loading schedule:', error);
-                const scheduleContainer = document.getElementById('schedule-content');
-                scheduleContainer.innerHTML = '<div class="empty-message">加载日程失败</div>';
-            });
+                })
+                .catch(error => {
+                    console.error('Error loading schedule:', error);
+                    const scheduleContainer = document.getElementById('schedule-content');
+                    scheduleContainer.innerHTML = '<div class="empty-message">加载日程失败</div>';
+                });
     }
+
+        // 辅助函数：获取任务样式类
+        function getTaskClass(classLevel) {
+            switch(classLevel.toString()) {  // 确保转换为字符串比较
+                case '0': return 'task-personal';
+                case '1': return 'task-urgent';
+                case '2': return 'task-formal';
+                case '3': return 'task-informal';
+                default: return '';
+            }
+        }
 
     // 显示操作菜单
     window.showActionMenu = function (event, taskId) {
@@ -556,15 +829,17 @@
                 const form = document.getElementById('add-schedule-form-submit');
                 form.dataset.editId = taskId;
 
-                // 转换时间格式（移除T后的秒数）
-                const formatDateTime = (datetimeStr) => {
-                    return datetimeStr.replace(/:\d{2}\.\d{3}Z$/, '').replace(' ', 'T');
+                const toLocalDateTimeString = (dateStr) => {
+                    const date = new Date(dateStr);
+                    const offset = date.getTimezoneOffset() * 60000; // 时区偏移毫秒数
+                    const localDate = new Date(date.getTime() - offset);
+                    return localDate.toISOString().slice(0, 16); // 截取日期时间部分
                 };
                 console.log(task);
                 form.querySelector('#title').value = task.title;
                 form.querySelector('#content').value = task.content;
-                form.querySelector('#start_time').value = formatDateTime(task.start_time);
-                form.querySelector('#end_time').value = formatDateTime(task.end_time);
+                form.querySelector('#start_time').value = toLocalDateTimeString(task.start_time);
+                form.querySelector('#end_time').value = toLocalDateTimeString(task.end_time);
                 form.querySelector('#class').value = task.class;
 
                 // 自动打开侧边栏
@@ -638,7 +913,6 @@
 
     effectBtn.addEventListener('click', function (e) {
         e.stopPropagation();
-
         wrapper.classList.toggle('effect-active');
         sidebar.classList.toggle('active');
 
@@ -671,6 +945,13 @@
             wrapper.classList.remove('effect-active');
             sidebar.classList.remove('active');
             sidebar.innerHTML = '';
+            const form = document.getElementById('add-schedule-form-submit');
+            form.removeAttribute('data-edit-id');
+            form.querySelector('#title').value = '';
+            form.querySelector('#content').value = '';
+            form.querySelector('#start_time').value = '';
+            form.querySelector('#end_time').value = '';
+            form.querySelector('#class').value = '';
             originalForm.style.display = 'none';
         }
     });
@@ -714,7 +995,7 @@
         console.error('Error:', error);
     });
 });
-
+    
     // 点击遮罩层隐藏通知内容
     document.getElementById('overlay').addEventListener('click', function () {
         var notificationContent = document.getElementById('notification-content');
@@ -738,9 +1019,121 @@
         }
     });
 
+    // 初始化Goals
+    function loadGoals() {
+    fetch('/get_goals')
+        .then(res => res.json())
+        .then(goals => {
+            const container = document.getElementById('goals-content');
+            container.innerHTML = '';
+
+            if (goals.length === 0) {
+                container.innerHTML = '<div class="empty-message">暂无目标</div>';
+                return;
+            }
+
+            goals.forEach(goal => {
+                const goalEl = document.createElement('div');
+                goalEl.className = 'goal-item';
+                
+                const dueTime = goal.iso_due ? new Date(goal.iso_due) : null;
+                const now = new Date();
+                let statusText = '';
+                let statusClass = '';
+                
+                if (dueTime) {
+                    const diff = dueTime - now;
+                    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                    const hours = Math.floor(diff / (1000 * 60 * 60));
+                    
+                    if (diff < 0) {
+                        statusText = '已逾期';
+                        statusClass = 'overdue';
+                    } else if (hours <= 24) {
+                        statusText = `${hours}小时`;
+                        statusClass = 'urgent';
+                    } else {
+                        statusText = `${days}天`;
+                    }
+                }
+
+                goalEl.innerHTML = `
+                    <div class="goal-header">
+                        <h4>${goal.title}</h4>
+                        <div class="goal-actions">
+                            ${dueTime ? `
+                            <span class="due-status ${statusClass}">${statusText}</span>
+                            ` : ''}
+                            <span class="delete-goal" onclick="deleteGoal(${goal.id})">×</span>
+                        </div>
+                    </div>
+                    ${dueTime ? `
+                    <div class="goal-time">
+                        截止时间：${new Date(goal.iso_due).toLocaleString()}
+                    </div>` : ''}
+                `;
+                container.appendChild(goalEl);
+            });
+        });
+}
+
+    // 删除目标
+    window.deleteGoal = function(goalId) {
+        if (confirm('确定删除这个目标吗？')) {
+            fetch(`/delete_goal/${goalId}`, { method: 'DELETE' })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        loadGoals();
+                    }
+                });
+        }
+    }
+
+    document.getElementById('add-goal-btn').addEventListener('click', function() {
+    document.getElementById('goal-form').style.display = 'block';
+    document.getElementById('goal-overlay').style.display = 'block';
+    document.body.style.overflow = 'hidden'; // 防止背景滚动
+});
+
+        // 关闭表单
+        window.closeGoalForm = function() {
+            document.getElementById('goal-form').style.display = 'none';
+            document.getElementById('goal-overlay').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        // 点击遮罩层关闭
+        document.getElementById('goal-overlay').addEventListener('click', closeGoalForm);
+
+        // 修改表单提交逻辑
+        document.getElementById('add-goal-form-submit').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = {
+                title: document.getElementById('goal-title').value,
+                due_time: document.getElementById('due-time').value || null
+            };
+            
+            fetch('/add_goal', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            }).then(res => res.json()).then(data => {
+                if (data.success) {
+                    closeGoalForm();
+                    loadGoals();
+                    // 清空表单
+                    document.getElementById('goal-title').value = '';
+                    document.getElementById('due-time').value = '';
+                }
+            });
+        });
+
+
     // 页面加载时调用
     updateWeekDisplay();
     loadSchedule();
+    loadGoals();
 
     // 添加全局点击监听来关闭菜单
     document.addEventListener('click', function (e) {
